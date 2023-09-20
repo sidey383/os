@@ -19,10 +19,17 @@ int main() {
 
 	err = pthread_create(&tid, NULL, mythread, NULL);
 	if (err) {
-	    printf("main: pthread_create() failed: %s\n", strerror(err));
+	    fprintf(stderr, "main: pthread_create() failed: %s\n", strerror(err));
 		return -1;
 	}
 
-	return 0;
+    err = pthread_join(tid, NULL);
+
+    if (err) {
+	    fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
+		return -1;
+	}
+
+   	return 0;
 }
 
