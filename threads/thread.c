@@ -18,10 +18,19 @@ int main() {
 	printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
 
 	err = pthread_create(&tid, NULL, mythread, NULL);
-	if (err) {
-	    printf("main: pthread_create() failed: %s\n", strerror(err));
+	if (err != 0) {
+	    fprintf(stderr, "main: pthread_create() failed: %s\n", strerror(err));
 		return -1;
-	}
+	} else {
+        printf("main: create thread %ld\n", tid);
+    }
+
+    err = pthread_join(tid, NULL);
+    if (err != 0) {
+        fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
+    } else {
+        printf("main: join thread %ld\n", tid);
+    }
 
 	return 0;
 }
