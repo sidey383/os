@@ -60,32 +60,23 @@ void *mythread(void *arg) {
 }
 
 int main() {
-    pthread_t tid[N];
+    pthread_t tid;
     int err;
 
     printProcMap();
 
     printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
     for (int i = 0; i < N; i++) {
-        err = pthread_create(&(tid[i]), NULL, mythread, NULL);
+        err = pthread_create(&(tid), NULL, mythread, NULL);
         if (err != 0) {
             fprintf(stderr, "main: pthread_create() failed: %s\n", strerror(err));
             return -1;
         } else {
-            printf("Create thread tid: %ld\n", tid[i]);
+            printf("Create thread tid: %ld\n", tid);
         }
         printProcMap();
     }
-    void* status_addr;
-    for (int i = 0; i < N; i++) {
-        err = pthread_join(tid[i], &status_addr);
-        if (err != 0) {
-            fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
-        } else {
-            printf("main: pthread_join(): %ld\n", tid[i]);
-        }
-        printProcMap();
-    }
+    pthread_exit(NULL);
     printProcMap();
     return 0;
 }
