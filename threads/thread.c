@@ -20,6 +20,8 @@ void *mythread(void *arg) {
         pthread_self(),
         &local, &localStatic, &localConst, &global
     );
+    local++;
+    global++;
     return (void*)0;
 }
 
