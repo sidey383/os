@@ -8,7 +8,7 @@
 
 void *mythread(void *arg) {
 	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
-	return NULL;
+	return (void*)42;
 }
 
 int main() {
@@ -25,11 +25,12 @@ int main() {
         printf("main: create thread %ld\n", tid);
     }
 
-    err = pthread_join(tid, NULL);
+    long val;
+    err = pthread_join(tid, (void**)&val);
     if (err != 0) {
         fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
     } else {
-        printf("main: join thread %ld\n", tid);
+        printf("main: join thread %ld return %ld\n", tid, val);
     }
 
 	return 0;
