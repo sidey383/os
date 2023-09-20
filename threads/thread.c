@@ -8,9 +8,19 @@
 
 const int N = 5;
 
+int global;
+
 void *mythread(void *arg) {
-	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
-	return NULL;
+    int local = 0;
+    static int localStatic = 0;
+    const int localConst = 2;
+    printf(
+        "mythread [pid: %d ppid: %d tid: %d self: %ld] local %p local static %p local const %p global %p \n",
+        getpid(), getppid(), gettid(),
+        pthread_self(),
+        &local, &localStatic, &localConst, &global
+    );
+    return (void*)0;
 }
 
 int main() {
