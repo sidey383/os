@@ -6,30 +6,34 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+const int N = 5;
+
 void *mythread(void *arg) {
 	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
 	return NULL;
 }
 
 int main() {
-	pthread_t tid;
-	int err;
+    pthread_t tid[N];
+    int err;
 
-	printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
-
-	err = pthread_create(&tid, NULL, mythread, NULL);
-	if (err) {
-	    fprintf(stderr, "main: pthread_create() failed: %s\n", strerror(err));
-		return -1;
-	}
-
-    err = pthread_join(tid, NULL);
-
-    if (err) {
-	    fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
-		return -1;
-	}
-
-   	return 0;
+    printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
+    for (int i = 0; i < N; i++) {
+        err = pthread_create(&(tid[i]), NULL, mythread, NULL);
+        if (err != 0) {
+            fprintf(stderr, "main: pthread_create() failed: %s\n", strerror(err));
+            return -1;
+        } else {
+            printf("Create thread tid: %ld\n", tid[i]);
+        }
+    }
+    void* status_addr;
+    for (int i = 0; i < N; i++) {
+        err = pthread_join(tid[i], &status_addr);
+        if (err != 0) {
+            fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
+        }
+    }
+    return 0;
 }
 
