@@ -23,12 +23,7 @@ int main() {
 		return -1;
 	}
 
-    err = pthread_join(tid, NULL);
-
-    if (err) {
-	    fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
-		return -1;
-	}
+    pthread_exit(NULL);
 
    	return 0;
 }
