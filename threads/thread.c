@@ -11,6 +11,7 @@ int counter = 0;
 void *mythread(void *arg) {
     while (1) {
         counter++;
+        pthread_testcancel();
     }
     return NULL;
 }
