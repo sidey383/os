@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 void *mythread(void *arg) {
+    pthread_detach(pthread_self());
 	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
 	pthread_t* ret = malloc(sizeof(pthread_t));
     (*ret) = pthread_self();
