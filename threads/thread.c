@@ -6,9 +6,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+int counter = 0;
+
 void *mythread(void *arg) {
     while (1) {
-        printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
+        counter++;
     }
     return NULL;
 }
@@ -29,6 +31,8 @@ int main() {
     if (err != 0) {
         fprintf(stderr, "main: pthread_cancel() failed: %s\n", strerror(err));
         return -1;
+    } else {
+        printf("counter: %d\n", counter);
     }
     pthread_exit(NULL);
     return 0;
