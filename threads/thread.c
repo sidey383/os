@@ -15,14 +15,14 @@ void *mythread(void *arg) {
     static int localStatic = 0;
     const int localConst = 2;
     printf(
-        "mythread [pid: %d ppid: %d tid: %d self: %ld] local %p local static %p local const %p global %p \n",
+        "mythread [pid: %d ppid: %d tid: %d self: %ld] local %p:%d local static %p local const %p global %p:%d \n",
         getpid(), getppid(), gettid(),
         pthread_self(),
-        &local, &localStatic, &localConst, &global
+        &local, local, &localStatic, &localConst, &global, global
     );
     local++;
     global++;
-    return (void*)0;
+    return NULL;
 }
 
 int main() {
