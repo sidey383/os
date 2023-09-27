@@ -56,7 +56,7 @@ void *mythread(void *arg) {
     );
     local++;
     global++;
-    return (void*)0;
+    return NULL;
 }
 
 int main() {
