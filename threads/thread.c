@@ -5,14 +5,23 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
 
-int counter = 0;
+void freeData(void* arg) {
+    printf("free %p\n", arg);
+    free(arg);
+}
 
-void *mythread(void *arg) {
+void* mythread(void* arg) {
+    char* str = (char*) malloc(100);
+    printf("malloc %p\n", str);
+    pthread_cleanup_push(freeData, str);
+    strcpy(str, "hello world\n");
+    int len = strlen(str);
     while (1) {
-        counter++;
-        pthread_testcancel();
+        write(STDOUT_FILENO, str, len);
     }
+    pthread_cleanup_pop(1);
     return NULL;
 }
 
@@ -32,8 +41,6 @@ int main() {
     if (err != 0) {
         fprintf(stderr, "main: pthread_cancel() failed: %s\n", strerror(err));
         return -1;
-    } else {
-        printf("counter: %d\n", counter);
     }
     pthread_exit(NULL);
     return 0;
