@@ -9,8 +9,8 @@
 
 void *mythread(void *arg) {
 	printf("mythread [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
-	pid_t* ret = malloc(sizeof(pid_t));
-    (*ret) = gettid();
+	pthread_t* ret = malloc(sizeof(pthread_t));
+    (*ret) = pthread_self();
     return ret;
 }
 
@@ -28,12 +28,12 @@ int main() {
             printf("main: create thread %ld\n", tid);
         }
 
-        pid_t* val;
+        pthread_t* val;
         err = pthread_join(tid, (void**)&val);
         if (err != 0) {
             fprintf(stderr, "main: pthread_join() failed: %s\n", strerror(err));
         } else {
-            printf("main: join thread %ld return %d\n", tid, *val);
+            printf("main: join thread %ld return %ld\n", tid, *val);
             free(val);
         }
     }
