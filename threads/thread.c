@@ -19,6 +19,7 @@ void *mythread(void *arg) {
 
 int main() {
     pthread_t tid;
+    pthread_attr_t attr;
     int err;
     params val;
 
@@ -26,14 +27,28 @@ int main() {
     val.num = 42;
 
     printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
-    err = pthread_create(&tid, NULL, mythread, &val);
+    err = pthread_attr_init(&attr);
+    if (err != 0) {
+        fprintf(stderr, "main: pthread_attr_init() failed: %s\n", strerror(err));
+        return -1;
+    }
+    err = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (err != 0) {
+        fprintf(stderr, "main: pthread_attr_setdetachstate() failed: %s\n", strerror(err));
+        return -1;
+    }
+    err = pthread_create(&tid, &attr, mythread, &val);
     if (err != 0) {
         fprintf(stderr, "main: pthread_create() failed: %s\n", strerror(err));
         return -1;
     } else {
-        printf("Create thread tid: %ld\n", tid);
+        printf("main: create thread %ld\n", tid);
     }
-
+    err = pthread_attr_destroy(&attr);
+    if (err != 0) {
+        fprintf(stderr, "main: pthread_attr_destroy() failed: %s\n", strerror(err));
+        return -1;
+    }
     pthread_exit(NULL);
     return 0;
 }
