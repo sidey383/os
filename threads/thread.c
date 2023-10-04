@@ -7,7 +7,7 @@
 #include <signal.h>
 #include <stdlib.h>
 
-#define Handle(err ,f, ...) {\
+#define Handle(err, f, ...) {\
     err = f(__VA_ARGS__);              \
     if (err != 0) {             \
         printf("thread [%d %d %d]: %s error %s\n", getpid(), getppid(), gettid(), #f, strerror(err));\
@@ -15,15 +15,7 @@
     }                          \
 }
 
-#define Handle2(err ,f, val1) {\
-    err = f(val1);              \
-    if (err != 0) {             \
-        printf("thread [%d %d %d]: %s error %s\n", getpid(), getppid(), gettid(), #f, strerror(err));\
-        exit(-1);\
-    }                          \
-}
-
-void *thread2(void *arg) {
+void *thread2() {
 
     sigset_t sigm;
 
@@ -43,7 +35,7 @@ void *thread2(void *arg) {
 
     printf("thread [%d %d %d]: I catch SIGQUIT!\n", getpid(), getppid(), gettid());
 
-    Handle(err, sigwait, &sigm, &sig);
+    Handle(err, sigwait, &sigm, &sig)
 
     printf("thread [%d %d %d]: I recive signal %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
     return NULL;
@@ -55,7 +47,7 @@ void sigHandler(int sig) {
     pthread_exit(NULL);
 }
 
-void *thread1(void* arg) {
+void *thread1() {
 
     int err;
 
