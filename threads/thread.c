@@ -2,32 +2,80 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <string.h>
-#include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <signal.h>
+#include <stdlib.h>
 
-void *thread1(void *arg) {
-    printf("thread1 [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
-    sigset_t set;
+#define Handle(err ,f, ...) {\
+    err = f(__VA_ARGS__);              \
+    if (err != 0) {             \
+        printf("thread [%d %d %d]: %s error %s\n", getpid(), getppid(), gettid(), #f, strerror(err));\
+        exit(-1);\
+    }                          \
+}
 
-    sigemptyset(&set);
-    sigaddset(&set, SIGQUIT);
-    sigaddset(&set, SIGUSR1);
-    err = pthread_sigmask(SIG_BLOCK, &set, NULL);
-    if (err != 0) {
-        fprintf(stderr, "main: pthread_sigmask() failed: %s\n", strerror(err));
-        return -1;
-    }
+#define Handle2(err ,f, val1) {\
+    err = f(val1);              \
+    if (err != 0) {             \
+        printf("thread [%d %d %d]: %s error %s\n", getpid(), getppid(), gettid(), #f, strerror(err));\
+        exit(-1);\
+    }                          \
+}
+
+void *thread2(void *arg) {
+
+    sigset_t sigm;
+
+    int err;
+
+    Handle(err, sigfillset, &sigm)
+
+    Handle(err, sigdelset, &sigm, SIGQUIT)
+
+    Handle(err, pthread_sigmask, SIG_BLOCK, &sigm, NULL)
+
+    Handle(err, sigemptyset, &sigm)
+
+    Handle(err, sigaddset, &sigm, SIGQUIT)
+
+    int sig;
+
+    printf("thread [%d %d %d]: I catch SIGQUIT!\n", getpid(), getppid(), gettid());
+
+    Handle(err, sigwait, &sigm, &sig);
+
+    printf("thread [%d %d %d]: I recive signal %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
     return NULL;
 }
 
-void *thread2(void* arg) {
-    printf("thread2 [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
-    return NULL;
+
+void sigHandler(int sig) {
+    printf("thread [%d %d %d] SigintHandler handle %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
+    pthread_exit(NULL);
 }
 
-void *thread3(void* arg) {
-    printf("thread3 [%d %d %d]: Hello from mythread!\n", getpid(), getppid(), gettid());
+void *thread1(void* arg) {
+
+    int err;
+
+    sigset_t sigset;
+
+    Handle(err, sigfillset, &sigset)
+
+    Handle(err, sigdelset, &sigset, SIGINT)
+
+    Handle(err, pthread_sigmask, SIG_BLOCK, &sigset, NULL)
+
+    struct sigaction act;
+
+    act.sa_handler = sigHandler;
+
+    Handle(err, sigaction, SIGINT, &act, NULL)
+
+    printf("thread [%d %d %d]: I catch SIGINT!\n", getpid(), getppid(), gettid());
+
+    sleep(60);
     return NULL;
 }
 
@@ -35,16 +83,21 @@ void *thread3(void* arg) {
 int main() {
     pthread_t tid;
     int err;
-    printf("main [%d %d %d]: Hello from main!\n", getpid(), getppid(), gettid());
-    err = pthread_create(&tid, NULL, thread1, NULL);
-    if (err != 0) {
-        fprintf(stderr, "main: pthread_create() failed: %s\n", strerror(err));
-        return -1;
-    } else {
-        printf("Create thread tid: %ld\n", tid);
-    }
+
+    Handle(err, pthread_create, &tid, NULL, thread1, NULL)
+
+    Handle(err, pthread_create, &tid, NULL, thread2, NULL)
+
+    sigset_t sigset;
+
+    Handle(err, sigfillset, &sigset)
+
+    Handle(err, pthread_sigmask, SIG_BLOCK, &sigset, NULL)
+
+    printf("thread [%d %d %d]: I don't catch signals!\n", getpid(), getppid(), gettid());
+
+    sleep(30);
 
     pthread_exit(NULL);
-    return 0;
 }
 
