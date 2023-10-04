@@ -23,17 +23,17 @@ void *thread2() {
 
     Handle(err, sigfillset, &sigm)
 
-    Handle(err, sigdelset, &sigm, SIGQUIT)
+    Handle(err, sigdelset, &sigm, SIGINT)
 
     Handle(err, pthread_sigmask, SIG_BLOCK, &sigm, NULL)
 
     Handle(err, sigemptyset, &sigm)
 
-    Handle(err, sigaddset, &sigm, SIGQUIT)
+    Handle(err, sigaddset, &sigm, SIGINT)
 
     int sig;
 
-    printf("thread [%d %d %d]: I catch SIGQUIT!\n", getpid(), getppid(), gettid());
+    printf("thread [%d %d %d]: I catch SIGINT!\n", getpid(), getppid(), gettid());
 
     Handle(err, sigwait, &sigm, &sig)
 
@@ -76,9 +76,11 @@ int main() {
     pthread_t tid;
     int err;
 
+    Handle(err, pthread_create, &tid, NULL, thread2, NULL)
+
     Handle(err, pthread_create, &tid, NULL, thread1, NULL)
 
-    Handle(err, pthread_create, &tid, NULL, thread2, NULL)
+    Handle(err, pthread_create, &tid, NULL, thread1, NULL)
 
     sigset_t sigset;
 
@@ -88,7 +90,7 @@ int main() {
 
     printf("thread [%d %d %d]: I don't catch signals!\n", getpid(), getppid(), gettid());
 
-    sleep(30);
+    //sleep(30);
 
     pthread_exit(NULL);
 }
