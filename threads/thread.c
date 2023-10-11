@@ -10,7 +10,7 @@
 #define Handle(err, f, ...) {\
     err = f(__VA_ARGS__);              \
     if (err != 0) {             \
-        printf("thread [%d %d %d]: %s error %s\n", getpid(), getppid(), gettid(), #f, strerror(err));\
+        fprintf(stderr, "thread [%d %d %d]: %s error %s\n", getpid(), getppid(), gettid(), #f, strerror(err));\
         exit(-1);\
     }                          \
 }
