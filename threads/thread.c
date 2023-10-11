@@ -37,7 +37,8 @@ void *thread2() {
 
     Handle(err, sigwait, &sigm, &sig)
 
-    printf("thread [%d %d %d]: I recive signal %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
+    printf("thread [%d %d %d]: I've recive signal %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
+    printf("thread [%d %d %d]: I've complete!\n", getpid(), getppid(), gettid());
     return NULL;
 }
 
@@ -67,7 +68,13 @@ void *thread1() {
 
     printf("thread [%d %d %d]: I catch SIGINT!\n", getpid(), getppid(), gettid());
 
-    sleep(60);
+    int c = 0;
+    while (1) {
+        c++;
+    }
+
+    printf("thread [%d %d %d]: I've finished!\n", getpid(), getppid(), gettid());
+
     return NULL;
 }
 
@@ -88,7 +95,9 @@ int main() {
 
     printf("thread [%d %d %d]: I don't catch signals!\n", getpid(), getppid(), gettid());
 
-    sleep(30);
+    sleep(10);
+
+    printf("thread [%d %d %d]: I've finished!\n", getpid(), getppid(), gettid());
 
     pthread_exit(NULL);
 }
