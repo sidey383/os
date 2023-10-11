@@ -14,6 +14,10 @@ void freeData(void* arg) {
 
 void* mythread(void* arg) {
     char* str = (char*) malloc(100);
+    if (str == NULL) {
+        fputs("Can't allocate memory fot 'hello world' string\n", stderr);
+        return NULL;
+    }
     printf("malloc %p\n", str);
     pthread_cleanup_push(freeData, str);
     strcpy(str, "hello world\n");
