@@ -44,7 +44,27 @@ queue_t* queue_init(int max_count) {
 }
 
 void queue_destroy(queue_t *q) {
-	// TODO: It's needed to implement this function
+    int count = 0;
+    pthread_cancel(q->qmonitor_tid);
+    pthread_join(q->qmonitor_tid, NULL);
+    while (q->first != NULL) {
+        count++;
+        if (count > q->count) {
+            break;
+        }
+        qnode_t *first = q->first;
+        q->first = q->first->next;
+        free(first);
+    }
+    if (count != q->count) {
+            fprintf(
+                    stderr,
+                    "Destroy corrupted queue, wrong count of elements. Find %d elements, expect %d elements\n",
+                    count,
+                    q->count
+            );
+    }
+    free(q);
 }
 
 int queue_add(queue_t *q, int val) {
@@ -77,6 +97,7 @@ int queue_add(queue_t *q, int val) {
 	return 1;
 }
 
+
 int queue_get(queue_t *q, int *val) {
 	q->get_attempts++;
 
@@ -98,9 +119,9 @@ int queue_get(queue_t *q, int *val) {
 }
 
 void queue_print_stats(queue_t *q) {
-	printf("queue stats: current size %d; attempts: (%ld %ld %ld); counts (%ld %ld %ld)\n",
-		q->count,
-		q->add_attempts, q->get_attempts, q->add_attempts - q->get_attempts,
-		q->add_count, q->get_count, q->add_count -q->get_count);
+    printf("queue stats: current size %d; attempts: (%ld %ld %ld); counts (%ld %ld %ld)\n",
+           q->count,
+           q->add_attempts, q->get_attempts, q->add_attempts - q->get_attempts,
+           q->add_count, q->get_count, q->add_count - q->get_count);
 }
 

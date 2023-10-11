@@ -24,7 +24,6 @@ int main() {
 
 		queue_print_stats(q);
 	}
-
 	for (int i = 0; i < 12; i++) {
 		int val = -1;
 		int ok = queue_get(q, &val);
