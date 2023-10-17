@@ -44,7 +44,27 @@ queue_t* queue_init(int max_count) {
 }
 
 void queue_destroy(queue_t *q) {
-	// TODO: It's needed to implement this function
+	int count = 0;
+    pthread_cancel(q->qmonitor_tid);
+    pthread_join(q->qmonitor_tid, NULL);
+    while (q->first != NULL) {
+        count++;
+        if (count > q->count) {
+            break;
+        }
+        qnode_t *first = q->first;
+        q->first = q->first->next;
+        free(first);
+    }
+    if (count != q->count) {
+            fprintf(
+                    stderr,
+                    "Destroy corrupted queue, wrong count of elements. Find %d elements, expect %d elements\n",
+                    count,
+                    q->count
+            );
+    }
+    free(q);
 }
 
 int queue_add(queue_t *q, int val) {
