@@ -33,18 +33,22 @@ void *thread2() {
 
     int sig;
 
-    printf("thread [%d %d %d]: I catch SIGQUIT!\n", getpid(), getppid(), gettid());
+    printf("[%d %d %d]: I catch SIGQUIT!\n", getpid(), getppid(), gettid());
 
     Handle(err, sigwait, &sigm, &sig)
 
-    printf("thread [%d %d %d]: I've recive signal %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
-    printf("thread [%d %d %d]: I've complete!\n", getpid(), getppid(), gettid());
+    printf("[%d %d %d]: I've recive signal %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
+    printf("[%d %d %d]: I've complete!\n", getpid(), getppid(), gettid());
     return NULL;
 }
 
 
-void sigHandler(int sig) {
-    printf("thread [%d %d %d] SigintHandler handle %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
+void sigAction(int sig, siginfo_t* info, void* ucontext) {
+    char buf[4094];
+    int size = snprintf(buf, 4096, "[%d %d %d] sigaction handle %s from %d\n", getpid(), getppid(), gettid(), sigdescr_np(sig), info->si_pid);
+    if (size > 0) {
+        write(STDOUT_FILENO,buf, size);
+    }
     pthread_exit(NULL);
 }
 
@@ -62,18 +66,19 @@ void *thread1() {
 
     struct sigaction act;
 
-    act.sa_handler = sigHandler;
+    act.sa_sigaction = sigAction;
+
+    act.sa_flags = SA_SIGINFO;
 
     Handle(err, sigaction, SIGINT, &act, NULL)
 
-    printf("thread [%d %d %d]: I catch SIGINT!\n", getpid(), getppid(), gettid());
+    printf("[%d %d %d]: I catch SIGINT!\n", getpid(), getppid(), gettid());
 
-    int c = 0;
     while (1) {
-        c++;
+        sleep(1);
     }
 
-    printf("thread [%d %d %d]: I've finished!\n", getpid(), getppid(), gettid());
+    printf("[%d %d %d]: I've finished!\n", getpid(), getppid(), gettid());
 
     return NULL;
 }
@@ -93,11 +98,11 @@ int main() {
 
     Handle(err, pthread_sigmask, SIG_BLOCK, &sigset, NULL)
 
-    printf("thread [%d %d %d]: I don't catch signals!\n", getpid(), getppid(), gettid());
+    printf("[%d %d %d]: I don't catch signals!\n", getpid(), getppid(), gettid());
 
     sleep(10);
 
-    printf("thread [%d %d %d]: I've finished!\n", getpid(), getppid(), gettid());
+    printf("[%d %d %d]: I've finished!\n", getpid(), getppid(), gettid());
 
     pthread_exit(NULL);
 }
