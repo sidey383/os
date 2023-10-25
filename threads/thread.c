@@ -25,7 +25,7 @@ void *thread2() {
 
     Handle(err, sigdelset, &sigm, SIGQUIT)
 
-    Handle(err, pthread_sigmask, SIG_BLOCK, &sigm, NULL)
+    Handle(err, pthread_sigmask, SIG_SETMASK, &sigm, NULL)
 
     Handle(err, sigemptyset, &sigm)
 
@@ -38,7 +38,7 @@ void *thread2() {
     Handle(err, sigwait, &sigm, &sig)
 
     printf("[%d %d %d]: I've recive signal %s\n", getpid(), getppid(), gettid(), sigdescr_np(sig));
-    printf("[%d %d %d]: I've complete!\n", getpid(), getppid(), gettid());
+    printf("[%d %d %d]: I've finished\n", getpid(), getppid(), gettid());
     return NULL;
 }
 
@@ -47,7 +47,7 @@ void sigAction(int sig, siginfo_t* info, void* ucontext) {
     char buf[4094];
     int size = snprintf(buf, 4096, "[%d %d %d] sigaction handle %s from %d\n", getpid(), getppid(), gettid(), sigdescr_np(sig), info->si_pid);
     if (size > 0) {
-        write(STDOUT_FILENO,buf, size);
+        write(STDOUT_FILENO, buf, size);
     }
     pthread_exit(NULL);
 }
@@ -62,7 +62,7 @@ void *thread1() {
 
     Handle(err, sigdelset, &sigset, SIGINT)
 
-    Handle(err, pthread_sigmask, SIG_BLOCK, &sigset, NULL)
+    Handle(err, pthread_sigmask, SIG_SETMASK, &sigset, NULL)
 
     struct sigaction act;
 
