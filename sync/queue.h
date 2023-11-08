@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <pthread.h>
 
 typedef struct _QueueNode {
 	int val;
@@ -18,6 +19,7 @@ typedef struct _Queue {
 	qnode_t *first;
 	qnode_t *last;
 
+    volatile pthread_spinlock_t lock;
 	pthread_t qmonitor_tid;
 
 	int count;
