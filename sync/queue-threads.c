@@ -65,7 +65,8 @@ void *writer(void *arg) {
 		int ok = queue_add(q, i);
 		if (!ok)
 			continue;
-		i++;
+        i++;
+        usleep(1);
 	}
 
 	return NULL;
@@ -78,7 +79,7 @@ int main() {
 
 	printf("main [%d %d %d]\n", getpid(), getppid(), gettid());
 
-	q = queue_init(100000000);
+	q = queue_init(10);
 
 	err = pthread_create(&tid1, NULL, reader, q);
 	if (err) {
@@ -86,7 +87,7 @@ int main() {
 		return -1;
 	}
 
-	sched_yield();
+	//sched_yield();
 
 	err = pthread_create(&tid2, NULL, writer, q);
 	if (err) {
