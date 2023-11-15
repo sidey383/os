@@ -26,7 +26,7 @@ queue_t* queue_init(int max_count) {
 		abort();
 	}
 
-    if(0 != pthread_spin_init(&(q->lock), PTHREAD_PROCESS_PRIVATE)) {
+    if(0 != pthread_mutex_init(&(q->lock), PTHREAD_PROCESS_PRIVATE)) {
         printf("Cannot init spinlock for a queue\n");
         free(q);
         abort();
@@ -64,7 +64,7 @@ void queue_destroy(queue_t *q) {
         q->first = q->first->next;
         free(first);
     }
-    err = pthread_spin_destroy(&(q->lock));
+    err = pthread_mutex_destroy(&(q->lock));
     if (err != 0) {
         fprintf(stderr, "queu lock destroy error: %s\n", strerror(errno));
     }
@@ -72,7 +72,7 @@ void queue_destroy(queue_t *q) {
 }
 
 int queue_add(queue_t *q, int val) {
-    if(pthread_spin_lock(&(q->lock)) != 0) {
+    if(pthread_mutex_lock(&(q->lock)) != 0) {
         return 0;
     }
 	q->add_attempts++;
@@ -80,7 +80,7 @@ int queue_add(queue_t *q, int val) {
 	assert(q->count <= q->max_count);
 
 	if (q->count == q->max_count) {
-	    pthread_spin_unlock(&(q->lock));
+	    pthread_mutex_unlock(&(q->lock));
     	return 0;
     }
 
@@ -102,12 +102,12 @@ int queue_add(queue_t *q, int val) {
 
 	q->count++;
 	q->add_count++;
-    pthread_spin_unlock(&(q->lock));
+    pthread_mutex_unlock(&(q->lock));
 	return 1;
 }
 
 int queue_get(queue_t *q, int *val) {
-    if(pthread_spin_lock(&(q->lock)) != 0) {
+    if(pthread_mutex_lock(&(q->lock)) != 0) {
         return 0;
     }
 	q->get_attempts++;
@@ -115,7 +115,7 @@ int queue_get(queue_t *q, int *val) {
 	assert(q->count >= 0);
 
 	if (q->count == 0) {
-        pthread_spin_unlock(&(q->lock));
+        pthread_mutex_unlock(&(q->lock));
     	return 0;
     }
 
@@ -128,18 +128,18 @@ int queue_get(queue_t *q, int *val) {
 	q->count--;
 	q->get_count++;
 
-    pthread_spin_unlock(&(q->lock));
+    pthread_mutex_unlock(&(q->lock));
 	return 1;
 }
 
 void queue_print_stats(queue_t *q) {
-    if(pthread_spin_lock(&(q->lock)) != 0) {
+    if(pthread_mutex_lock(&(q->lock)) != 0) {
         return;
     }
 	printf("queue stats: current size %d; attempts: (%ld %ld %ld); counts (%ld %ld %ld)\n",
 		q->count,
 		q->add_attempts, q->get_attempts, q->add_attempts - q->get_attempts,
 		q->add_count, q->get_count, q->add_count -q->get_count);
-    pthread_spin_unlock(&(q->lock));
+    pthread_mutex_unlock(&(q->lock));
 }
 
