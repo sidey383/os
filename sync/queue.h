@@ -11,25 +11,27 @@
 #include <pthread.h>
 
 typedef struct _QueueNode {
-	int val;
-	struct _QueueNode *next;
+	volatile int val;
+	volatile struct _QueueNode *next;
 } qnode_t;
 
 typedef struct _Queue {
-	qnode_t *first;
-	qnode_t *last;
+	volatile qnode_t *first;
+	volatile qnode_t *last;
 
     pthread_mutex_t lock;
+    pthread_cond_t cond_r;
+    pthread_cond_t cond_w;
 	pthread_t qmonitor_tid;
 
-	int count;
-	int max_count;
+	volatile int count;
+	volatile int max_count;
 
 	// queue statistics
-	long add_attempts;
-	long get_attempts;
-	long add_count;
-	long get_count;
+	volatile long add_attempts;
+	volatile long get_attempts;
+	volatile long add_count;
+	volatile long get_count;
 } queue_t;
 
 queue_t* queue_init(int max_count);

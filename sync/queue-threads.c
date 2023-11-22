@@ -78,7 +78,7 @@ int main() {
 
 	printf("main [%d %d %d]\n", getpid(), getppid(), gettid());
 
-	q = queue_init(100000000);
+	q = queue_init(100);
 
 	err = pthread_create(&tid1, NULL, reader, q);
 	if (err) {
