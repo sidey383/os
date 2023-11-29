@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <pthread.h>
 
+#define OK 1
+#define ERROR 0
+
 typedef struct _QueueNode {
 	int val;
 	struct _QueueNode *next;
