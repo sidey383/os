@@ -22,12 +22,12 @@ queue_t* queue_init(int max_count) {
 
     queue_t *q = malloc(sizeof(queue_t));
     if (!q) {
-        printf("Cannot allocate memory for a queue\n");
+        fprintf(stderr, "Cannot allocate memory for a queue\n");
         abort();
     }
 
     if(0 != sem_init(&(q->lock), 0, 1)) {
-        printf("queue_init: sem_init() failed: %s\n", strerror(errno));
+        fprintf(stderr, "queue_init: sem_init() failed: %s\n", strerror(errno));
         free(q);
         abort();
     }
@@ -42,7 +42,7 @@ queue_t* queue_init(int max_count) {
 
     err = pthread_create(&q->qmonitor_tid, NULL, qmonitor, q);
     if (err) {
-        printf("queue_init: pthread_create() failed: %s\n", strerror(err));
+        fprintf(stderr, "queue_init: pthread_create() failed: %s\n", strerror(err));
         abort();
     }
 
@@ -87,7 +87,7 @@ int queue_add(queue_t *q, int val) {
 
     qnode_t *new = malloc(sizeof(qnode_t));
     if (!new) {
-        printf("Cannot allocate memory for new node\n");
+        fprintf(stderr, "Cannot allocate memory for new node\n");
         abort();
     }
 
