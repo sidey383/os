@@ -10,6 +10,10 @@
 #include <unistd.h>
 #include <pthread.h>
 
+#define OK 1
+#define ERROR 0
+
+
 typedef struct _QueueNode {
 	volatile int val;
 	volatile struct _QueueNode *next;

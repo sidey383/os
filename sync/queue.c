@@ -25,41 +25,74 @@ queue_t* queue_init(int max_count) {
 		printf("Cannot allocate memory for a queue\n");
 		abort();
 	}
+	pthread_mutexattr_t mattr;
+	pthread_mutexattr_init(&mattr);
+	if (pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_ERRORCHECK) != 0) {
+		//PTHREAD_MUTEX_NORMAL
+		//PTHREAD_MUTEX_ERRORCHECK
+		//PTHREAD_MUTEX_RECURSIVE
+		//PTHREAD_MUTEX_DEFAULT
+		fprintf(stderr, "queue mutex attr settype error: %s\n", strerror(errno));
+		free(q);
+		abort();
+	}
+	if (pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_PRIVATE) != 0) {
+		fprintf(stderr, "queue mutex attr setpshared error: %s\n", strerror(errno));
+		free(q);
+		abort();
+	}
+	err = pthread_mutex_init(&(q->lock), &mattr);
+	if (err != 0) {
+		fprintf(stderr, "queue mutex init error: %s\n", strerror(errno));
+		free(q);
+		abort();
+	}
+	pthread_mutexattr_destroy(&mattr);
+	
+	pthread_condattr_t attr;
+	pthread_condattr_init(&attr);
+	if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC) != 0) {
+		fprintf(stderr, "queue cond var attr set clock error: %s\n", strerror(errno));
+		err = pthread_mutex_destroy(&(q->lock));
+		if (err != 0) {
+			fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
+		}
+		pthread_condattr_destroy(&attr);
+		free(q);
+		abort();
+	}
+	if (pthread_condattr_setpshared(&attr, PTHREAD_PROCESS_PRIVATE) != 0) {
+		
+	}
+	err = pthread_cond_init(&(q->cond_r), &attr);
+	if (err != 0) {
+		fprintf(stderr, "queue cond var read init error: %s\n", strerror(errno));
+		err = pthread_mutex_destroy(&(q->lock));
+		if (err != 0) {
+			fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
+		}
+		pthread_condattr_destroy(&attr);
+		free(q);
+		abort();
+	}
 
-    err = pthread_mutex_init(&(q->lock), PTHREAD_PROCESS_PRIVATE);
-    if (err != 0) {
-        fprintf(stderr, "queue mutex init error: %s\n", strerror(errno));
-        free(q);
-        abort();
-    }
 
-
-    err = pthread_cond_init(&(q->cond_r), NULL);
-    if (err != 0) {
-        fprintf(stderr, "queue cond var read init error: %s\n", strerror(errno));
-        err = pthread_mutex_destroy(&(q->lock));
-        if (err != 0) {
-            fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
-        }
-        free(q);
-        abort();
-    }
-
-
-    err = pthread_cond_init(&(q->cond_w), NULL);
-    if (err != 0) {
-        fprintf(stderr, "queue cond var write init error: %s\n", strerror(errno));
-        err = pthread_mutex_destroy(&(q->lock));
-        if (err != 0) {
-            fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
-        }
-        err = pthread_cond_destroy(&(q->cond_r));
-        if (err != 0) {
-            fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
-        }
-        free(q);
-        abort();
-    }
+	err = pthread_cond_init(&(q->cond_w), &attr);
+	if (err != 0) {
+		fprintf(stderr, "queue cond var write init error: %s\n", strerror(errno));
+		err = pthread_mutex_destroy(&(q->lock));
+		if (err != 0) {
+			fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
+		}
+		err = pthread_cond_destroy(&(q->cond_r));
+		if (err != 0) {
+			fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
+		}
+		pthread_condattr_destroy(&attr);
+		free(q);
+		abort();
+	}
+	pthread_condattr_destroy(&attr);
 
 	q->first = NULL;
 	q->last = NULL;
@@ -72,74 +105,76 @@ queue_t* queue_init(int max_count) {
 	err = pthread_create(&q->qmonitor_tid, NULL, qmonitor, q);
 	if (err) {
 		printf("queue_init: pthread_create() failed: %s\n", strerror(err));
-        err = pthread_mutex_destroy(&(q->lock));
-        if (err != 0) {
-            fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
-        }
-        err = pthread_cond_destroy(&(q->cond_r));
-        if (err != 0) {
-            fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
-        }
-        err = pthread_cond_destroy(&(q->cond_w));
-        if (err != 0) {
-            fprintf(stderr, "queue cond var write destroy error: %s\n", strerror(errno));
-        }
-        abort();
+		err = pthread_mutex_destroy(&(q->lock));
+		if (err != 0) {
+			fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
+		}
+		err = pthread_cond_destroy(&(q->cond_r));
+		if (err != 0) {
+			fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
+		}
+		err = pthread_cond_destroy(&(q->cond_w));
+		if (err != 0) {
+			fprintf(stderr, "queue cond var write destroy error: %s\n", strerror(errno));
+		}
+		pthread_condattr_destroy(&attr);
+		free(q);
+		abort();
 	}
 
 	return q;
 }
 
 void queue_destroy(queue_t *q) {
-    int err;
-    err = pthread_cancel(q->qmonitor_tid);
-    if (err != 0) {
-        fprintf(stderr, "qmonitor thread cancel error: %d\n", err);
-    } else {
-        err = pthread_join(q->qmonitor_tid, NULL);
-        if (err != 0)
-            fprintf(stderr, "qmonitor thread join error: %d\n", err);
-    }
-    while (q->first != NULL) {
-        qnode_t *first = (qnode_t *) q->first;
-        q->first = q->first->next;
-        free(first);
-    }
-    err = pthread_mutex_destroy(&(q->lock));
-    if (err != 0) {
-        fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
-    }
-    err = pthread_cond_destroy(&(q->cond_r));
-    if (err != 0) {
-        fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
-    }
-    err = pthread_cond_destroy(&(q->cond_w));
-    if (err != 0) {
-        fprintf(stderr, "queue cond var write destroy error: %s\n", strerror(errno));
-    }
-    free(q);
+	int err;
+	err = pthread_cancel(q->qmonitor_tid);
+	if (err != 0) {
+		fprintf(stderr, "qmonitor thread cancel error: %d\n", err);
+	} else {
+		err = pthread_join(q->qmonitor_tid, NULL);
+		if (err != 0)
+			fprintf(stderr, "qmonitor thread join error: %d\n", err);
+	}
+	while (q->first != NULL) {
+		qnode_t *first = (qnode_t *) q->first;
+		q->first = q->first->next;
+		free(first);
+	}
+	err = pthread_mutex_destroy(&(q->lock));
+	if (err != 0) {
+		fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
+	}
+	err = pthread_cond_destroy(&(q->cond_r));
+	if (err != 0) {
+		fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
+	}
+	err = pthread_cond_destroy(&(q->cond_w));
+	if (err != 0) {
+		fprintf(stderr, "queue cond var write destroy error: %s\n", strerror(errno));
+	}
+	free(q);
 }
 
 int queue_add(queue_t *q, int val) {
-    int err;
-    if((err = pthread_mutex_lock(&(q->lock))) != 0) {
-        fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(err));
-        return 0;
-    }
+	int err;
+	if((err = pthread_mutex_lock(&(q->lock))) != 0) {
+		fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(err));
+		return ERROR;
+	}
 	q->add_attempts++;
 
 	assert(q->count <= q->max_count);
 
 	while (q->count == q->max_count) {
-        if((err = pthread_cond_wait(&(q->cond_w), &(q->lock))) != 0) {
-            fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(err));
-            return 0;
-        }
-    }
+		if((err = pthread_cond_wait(&(q->cond_w), &(q->lock))) != 0) {
+			fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(err));
+			return ERROR;
+		}
+	}
 
 	qnode_t *new = malloc(sizeof(qnode_t));
 	if (!new) {
-		printf("Cannot allocate memory for new node\n");
+		fprintf(stderr, "Cannot allocate memory for new node\n");
 		abort();
 	}
 
@@ -155,27 +190,29 @@ int queue_add(queue_t *q, int val) {
 
 	q->count++;
 	q->add_count++;
-    pthread_cond_signal(&(q->cond_r));
-    pthread_mutex_unlock(&(q->lock));
-	return 1;
+	pthread_cond_signal(&(q->cond_r));
+	if (pthread_mutex_unlock(&(q->lock)) != 0) {
+		fprintf(stderr, "Cannot unlock mutex %s\n", strerror(errno));
+	}
+	return OK;
 }
 
 int queue_get(queue_t *q, int *val) {
-    int err;
-    if((err = pthread_mutex_lock(&(q->lock))) != 0) {
-        fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(err));
-        return 0;
-    }
+	int err;
+	if((err = pthread_mutex_lock(&(q->lock))) != 0) {
+		fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(err));
+		return ERROR;
+	}
 	q->get_attempts++;
 
 	assert(q->count >= 0);
 
 	while (q->count == 0) {
-        if((err = pthread_cond_wait(&(q->cond_r), &(q->lock))) != 0) {
-            fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(err));
-            return 0;
-        }
-    }
+		if((err = pthread_cond_wait(&(q->cond_r), &(q->lock))) != 0) {
+			fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(err));
+			return ERROR;
+		}
+	}
 
 	qnode_t *tmp = (qnode_t *) q->first;
 
@@ -186,19 +223,23 @@ int queue_get(queue_t *q, int *val) {
 	q->count--;
 	q->get_count++;
 
-    pthread_cond_signal(&(q->cond_w));
-    pthread_mutex_unlock(&(q->lock));
-	return 1;
+	pthread_cond_signal(&(q->cond_w));
+	if (pthread_mutex_unlock(&(q->lock)) != 0) {
+		fprintf(stderr, "Cannot unlock mutex %s\n", strerror(errno));
+	}
+	return OK;
 }
 
 void queue_print_stats(queue_t *q) {
-    if(pthread_mutex_lock(&(q->lock)) != 0) {
-        return;
-    }
+	if(pthread_mutex_lock(&(q->lock)) != 0) {
+		return;
+	}
 	printf("queue stats: current size %d; attempts: (%ld %ld %ld); counts (%ld %ld %ld)\n",
-		q->count,
-		q->add_attempts, q->get_attempts, q->add_attempts - q->get_attempts,
-		q->add_count, q->get_count, q->add_count -q->get_count);
-    pthread_mutex_unlock(&(q->lock));
+			q->count,
+			q->add_attempts, q->get_attempts, q->add_attempts - q->get_attempts,
+			q->add_count, q->get_count, q->add_count -q->get_count);
+	if (pthread_mutex_unlock(&(q->lock)) != 0) {
+		fprintf(stderr, "Cannot unlock mutex %s\n", strerror(errno));
+	}
 }
 
