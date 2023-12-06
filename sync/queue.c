@@ -99,51 +99,39 @@ void queue_destroy(queue_t *q) {
             sched_yield();
         err = pthread_mutex_destroy(&(q->lock));
     } while (err == EBUSY);
-    if (err != 0) {
+    if (err != 0)
         fprintf(stderr, "queue lock destroy error: %s\n", strerror(errno));
-    }
-    err = 0;
-    do {
-        if (err == EBUSY)
-            sched_yield();
-        err = pthread_cond_destroy(&(q->cond_r));
-    } while (err == EBUSY);
-    if (err != 0) {
+    err = pthread_cond_destroy(&(q->cond_r));
+    if (err != 0)
         fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
-    }
-    err = 0;
-    do {
-        if (err == EBUSY)
-            sched_yield();
-        err = pthread_cond_destroy(&(q->cond_w));
-    } while (err == EBUSY);
-    if (err != 0) {
-        fprintf(stderr, "queue cond var write destroy error: %s\n", strerror(errno));
-    }
+    err = pthread_cond_destroy(&(q->cond_w));
+    if (err != 0)
+        fprintf(stderr, "queue cond var read destroy error: %s\n", strerror(errno));
     free(q);
 }
 
 int queue_add(queue_t *q, int val) {
-    int err;
-    err = pthread_mutex_lock(&(q->lock));
-    if (err != 0) {
-        fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(err));
+    int fatalErr;
+    int isFull;
+    fatalErr = pthread_mutex_lock(&(q->lock));
+    if (fatalErr != 0) {
+        fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(fatalErr));
         return FATAL;
     }
     q->add_attempts++;
 
-    assert(q->count <= q->max_count);
-
-    while (q->count == q->max_count) {
-        err = pthread_cond_wait(&(q->cond_w), &(q->lock));
-        if (err != 0) {
-            fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(err));
+    isFull = q->count >= q->max_count;
+    while (isFull) {
+        fatalErr = pthread_cond_wait(&(q->cond_w), &(q->lock));
+        if (fatalErr != 0) {
+            fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(fatalErr));
             return FATAL;
         }
+        isFull = q->count >= q->max_count;
     }
 
     qnode_t *new = malloc(sizeof(qnode_t));
-    if (!new) {
+    if (new == NULL) {
         fprintf(stderr, "Cannot allocate memory for new node\n");
         abort();
     }
@@ -151,37 +139,43 @@ int queue_add(queue_t *q, int val) {
     new->val = val;
     new->next = NULL;
 
-    if (!q->first)
+    if (!q->first) {
         q->first = q->last = new;
-    else {
+    } else {
         q->last->next = new;
         q->last = q->last->next;
     }
 
     q->count++;
     q->add_count++;
+    // Never return an error code
     pthread_cond_signal(&(q->cond_r));
-    if (pthread_mutex_unlock(&(q->lock)) != 0) {
+    fatalErr = pthread_mutex_unlock(&(q->lock));
+    if (fatalErr != 0) {
         fprintf(stderr, "Cannot unlock mutex %s\n", strerror(errno));
+        return FATAL;
     }
     return OK;
 }
 
 int queue_get(queue_t *q, int *val) {
-    int err;
-    if ((err = pthread_mutex_lock(&(q->lock))) != 0) {
-        fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(err));
-        return ERROR;
+    int fatalErr;
+    int isEmpty;
+    fatalErr = pthread_mutex_lock(&(q->lock));
+    if (fatalErr != 0) {
+        fprintf(stderr, "pthread_mute_lock() error: %s\n", strerror(fatalErr));
+        return FATAL;
     }
     q->get_attempts++;
 
-    assert(q->count >= 0);
-
-    while (q->count == 0) {
-        if ((err = pthread_cond_wait(&(q->cond_r), &(q->lock))) != 0) {
-            fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(err));
-            return ERROR;
+    isEmpty = q->count == 0;
+    while (isEmpty) {
+        fatalErr = pthread_cond_wait(&(q->cond_r), &(q->lock));
+        if (fatalErr != 0) {
+            fprintf(stderr, "pthread_cond_wait() error: %s\n", strerror(fatalErr));
+            return FATAL;
         }
+        isEmpty = q->count == 0;
     }
 
     qnode_t *tmp = (qnode_t *) q->first;
@@ -194,8 +188,10 @@ int queue_get(queue_t *q, int *val) {
     q->get_count++;
 
     pthread_cond_signal(&(q->cond_w));
-    if (pthread_mutex_unlock(&(q->lock)) != 0) {
+    fatalErr = pthread_mutex_unlock(&(q->lock));
+    if (fatalErr != 0) {
         fprintf(stderr, "Cannot unlock mutex %s\n", strerror(errno));
+        return FATAL;
     }
     return OK;
 }
