@@ -40,10 +40,14 @@ queue_t *queue_init(int max_count) {
 
     err = pthread_create(&q->qmonitor_tid, NULL, qmonitor, q);
     if (err) {
-        q->qmonitor_tid = 0;
         fprintf(stderr, "queue_init: monitor thread create failed: %s\n", strerror(err));
-        return q;
+        err = pthread_mutex_destroy(&(q->lock));
+        if (err != 0) {
+            fprintf(stderr, "queue_init: pthread mutex destroy failed: %s\n", strerror(err));
+        }
+        return NULL;
     }
+
 
     return q;
 }
