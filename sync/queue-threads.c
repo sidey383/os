@@ -42,8 +42,10 @@ void *reader(void *arg) {
 	while (1) {
 		int val = -1;
 		int ok = queue_get(q, &val);
-		if (!ok)
-			continue;
+        if (ok == FATAL)
+            abort();
+        if (ok == SIZE_ERR)
+            continue;
 
 		if (expected != val)
 			printf(RED"ERROR: get value is %d but expected - %d" NOCOLOR "\n", val, expected);
@@ -63,11 +65,11 @@ void *writer(void *arg) {
 
 	while (1) {
 		int ok = queue_add(q, i);
-		if (!ok)
-			continue;
-		i++;
+        if (ok == OK)
+            i++;
+		if (ok == FATAL)
+            abort();
 	}
-
 	return NULL;
 }
 
