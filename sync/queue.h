@@ -10,8 +10,9 @@
 #include <unistd.h>
 #include <semaphore.h>
 
-#define OK 1
-#define ERROR 0
+#define OK 0
+#define ERR_SIZE 1
+#define FATAL 2
 
 typedef struct _QueueNode {
 	int val;

@@ -70,23 +70,30 @@ void queue_destroy(queue_t *q) {
     }
 }
 int queue_add(queue_t *q, int val) {
-    if (0 != sem_wait(&(q->lock))) {
+    int fatalErr;
+    int full;
+    fatalErr = sem_wait(&(q->lock));
+    if (fatalErr != 0) {
         fprintf(stderr, "queue_add: sem_wait() failed: %s\n", strerror(errno));
-        return ERROR;
+        return FATAL;
     }
     q->add_attempts++;
 
-    assert(q->count <= q->max_count);
+    full = q->count >= q->max_count;
 
-    if (q->count == q->max_count) {
-        if (0 != sem_post(&(q->lock))) {
-            fprintf(stderr, "queue_add: sem_post() failed: %s\n", strerror(errno));
-        }
-        return ERROR;
+    if (full)
+        fatalErr = sem_post(&(q->lock));
+
+    if (fatalErr != 0) {
+        fprintf(stderr, "queue_add: sem_post() failed: %s\n", strerror(errno));
+        return FATAL;
     }
 
+    if (full)
+        return ERR_SIZE;
+
     qnode_t *new = malloc(sizeof(qnode_t));
-    if (!new) {
+    if (new == NULL) {
         fprintf(stderr, "Cannot allocate memory for new node\n");
         abort();
     }
@@ -94,36 +101,45 @@ int queue_add(queue_t *q, int val) {
     new->val = val;
     new->next = NULL;
 
-    if (!q->first)
+    if (!q->first) {
         q->first = q->last = new;
-    else {
+    } else {
         q->last->next = new;
         q->last = q->last->next;
     }
 
     q->count++;
     q->add_count++;
-    if (0 != sem_post(&(q->lock))) {
+    fatalErr = sem_post(&(q->lock)) ;
+    if (fatalErr != 0) {
         fprintf(stderr, "queue_add: sem_post() failed: %s\n", strerror(errno));
+        return FATAL;
     }
     return OK;
 }
 
 int queue_get(queue_t *q, int *val) {
-    if (0 != sem_wait(&(q->lock))) {
-        fprintf(stderr, "queue_get: sem_wait() failed: %s\n", strerror(errno));
-        return ERROR;
+    int fatalErr;
+    int empty;
+    fatalErr = sem_wait(&(q->lock));
+    if (fatalErr != 0) {
+        fprintf(stderr, "queue_add: sem_wait() failed: %s\n", strerror(errno));
+        return FATAL;
     }
     q->get_attempts++;
 
-    assert(q->count >= 0);
+    empty = q->count == 0;
 
-    if (q->count == 0) {
-        if (0 != sem_post(&(q->lock))) {
-            fprintf(stderr, "queue_get: sem_post() failed: %s\n", strerror(errno));
-        }
-        return ERROR;
+    if (empty)
+        fatalErr = sem_post(&(q->lock));
+
+    if (fatalErr != 0) {
+        fprintf(stderr, "queue_get: sem_post() failed: %s\n", strerror(errno));
+        return FATAL;
     }
+
+    if (empty)
+        return ERR_SIZE;
 
     qnode_t *tmp = q->first;
 
@@ -134,15 +150,17 @@ int queue_get(queue_t *q, int *val) {
     q->count--;
     q->get_count++;
 
-    if (0 != sem_post(&(q->lock))) {
+    fatalErr = sem_post(&(q->lock)) ;
+    if (fatalErr != 0) {
         fprintf(stderr, "queue_get: sem_post() failed: %s\n", strerror(errno));
+        return FATAL;
     }
     return OK;
 }
 
 void queue_print_stats(queue_t *q) {
     if (0 != sem_wait(&(q->lock))) {
-        fprintf(stderr, "queue_get: sem_wait() failed: %s\n", strerror(errno));
+        fprintf(stderr, "queue_print_status: sem_wait() failed: %s\n", strerror(errno));
         return;
     }
     printf("queue stats: current size %d; attempts: (%ld %ld %ld); counts (%ld %ld %ld)\n",
