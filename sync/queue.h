@@ -11,7 +11,7 @@
 #include <pthread.h>
 
 #define OK 1
-#define ERROR 0
+#define FATAL 0
 
 
 typedef struct _QueueNode {
