@@ -80,11 +80,11 @@ queue_t *queue_init(int max_count) {
 void queue_destroy(queue_t *q) {
     int err;
     err = pthread_cancel(q->qmonitor_tid);
-    if (err != 0) {
+    if (err == 0) {
+        err = pthread_join(q->qmonitor_tid, NULL);
+    } else {
         fprintf(stderr, "qmonitor thread cancel error: %d\n", err);
         err = 0;
-    } else {
-        err = pthread_join(q->qmonitor_tid, NULL);
     }
     if (err != 0)
         fprintf(stderr, "qmonitor thread join error: %d\n", err);
@@ -206,6 +206,7 @@ void queue_print_stats(queue_t *q) {
            q->add_count, q->get_count, q->add_count - q->get_count);
     if (pthread_mutex_unlock(&(q->lock)) != 0) {
         fprintf(stderr, "Cannot unlock mutex %s\n", strerror(errno));
+        return;
     }
 }
 
