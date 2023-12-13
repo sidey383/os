@@ -10,7 +10,7 @@ char buffer2[256];
 char buffer3[1024];
 char buffer4[8192];
 
-void acceptFunc(ClientConnection con) {
+void acceptFunc(ClientConnection* con) {
     struct msghdr msg;
     struct iovec iovecArray[] = {
             {buffer1, sizeof(buffer1)},
@@ -23,7 +23,7 @@ void acceptFunc(ClientConnection con) {
     msg.msg_control = NULL;
     msg.msg_controllen = 0;
     msg.msg_flags = 0;
-    ssize_t size = recvmsg(con.socket, &msg, 0);
+    ssize_t size = recvmsg(con->socket, &msg, 0);
     if (size == -1) {
         fprintf(stderr, "Server work error: %s\n", strerror(errno));
         return;
@@ -38,19 +38,16 @@ void acceptFunc(ClientConnection con) {
 
 int main() {
     printf("pid %d\n", getpid());
-    address addrs;
-    addrs.address_len = sizeof(struct sockaddr_in);
-    addrs.family = AF_INET;
-    struct sockaddr_in *addr = (struct sockaddr_in *) &addrs.socket_address;
-    addr->sin_family = AF_INET;
-    addr->sin_port = htons(8080);
-    addr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    TCPServer *server = createServer(&addrs);
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    TCPServer *server = create_server((struct sockaddr*)&addr, sizeof(addr));
     if (server == NULL) {
         fprintf(stderr, "Server create error: %s\n", strerror(errno));
         return -1;
     }
-    int err = startServer(server, acceptFunc);
+    int err = start_server(server, acceptFunc);
     if (server == NULL) {
         fprintf(stderr, "Server start error: %s\n", strerror(err));
         return -1;

@@ -6,7 +6,9 @@ set(CMAKE_C_STANDARD 11)
 add_executable(project main.c
         http.c
         http.c
-        tcp.c)
+        tcp.c
+        threadList.c
+        socketBuffer.c)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)

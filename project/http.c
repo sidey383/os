@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include "socketBuffer.h"
 #include <sys/socket.h>
 #include <errno.h>
 #include "http.h"
