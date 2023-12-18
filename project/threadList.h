@@ -1,4 +1,5 @@
 #pragma once
+#include "debug.h"
 #include <pthread.h>
 
 typedef struct ThreadNode ThreadNode;

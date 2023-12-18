@@ -1,4 +1,5 @@
 #pragma once
+#include "debug.h"
 #include "threadList.h"
 #include <pthread.h>
 #include <sys/socket.h>

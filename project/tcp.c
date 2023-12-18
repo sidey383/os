@@ -1,3 +1,5 @@
+#define DEBUG
+
 #include <unistd.h>
 #include "tcp.h"
 #include <errno.h>
@@ -7,13 +9,21 @@
 #define INT2VOIDP(i) (void*)(size_t)(i)
 #define VOIDP2INT(v) (int)(size_t)(v)
 
-void freeConnection(void* val) {
-    ClientConnection* con = (ClientConnection*) val;
+void freeConnection(void *val) {
+    ClientConnection *con = (ClientConnection *) val;
     close(con->socket);
     free(con);
+    debug("Connection: close socket %d", con->socket)
+    debug("Free connection %p", val)
 }
 
-TCPServer *create_server(struct sockaddr* socket_address, socklen_t address_len) {
+void freeConnectionServer(void *val) {
+    ClientConnection *con = (ClientConnection *) val;
+    free(con);
+    debug("Free connection server %p", val)
+}
+
+TCPServer *create_server(struct sockaddr *socket_address, socklen_t address_len) {
     TCPServer *server = (TCPServer *) malloc(sizeof(TCPServer));
     int err;
     if (server == NULL) {
@@ -38,12 +48,14 @@ TCPServer *create_server(struct sockaddr* socket_address, socklen_t address_len)
         free(server);
         return NULL;
     }
+    debug("Open socket %d", server->socket)
     err = bind(server->socket, socket_address, address_len);
     if (err != 0) {
         //Not check errors
         //EBUSY  the mutex is currently locked - impossible
         pthread_mutex_destroy(&(server->mutex));
         close(server->socket);
+        debug("Server create: close socket %d", server->socket)
         free(server);
         return NULL;
     }
@@ -65,7 +77,7 @@ static int busyMutexDestroy(pthread_mutex_t *mutex) {
 }
 
 
-int deconstruct_server(TCPServer *server, int* error) {
+int deconstruct_server(TCPServer *server, int *error) {
     int err;
     int serverState;
 
@@ -77,21 +89,28 @@ int deconstruct_server(TCPServer *server, int* error) {
     pthread_mutex_unlock(&server->mutex);
     if (serverState == SERVER_ACTIVE || serverState == SERVER_FAIL) {
         err = pthread_cancel(server->main_thread);
-        void* serverResult;
+        void *serverResult;
         if (err == 0) {
             err = pthread_join(server->main_thread, &serverResult);
         } else {
-            fprintf(stderr, "deconstruct_server() error during pthread_cancel() %d", err);
+            fprintf(stderr, "deconstruct_server() error during pthread_cancel() %s", strerror(err));
             err = 0;
         }
-        if (err != 0) {
-            *error = VOIDP2INT(serverResult);
+        if (err == 0) {
+            if (serverResult != PTHREAD_CANCELED)
+                *error = VOIDP2INT(serverResult);
+            else {
+                *error = 0;
+            }
         } else {
-            fprintf(stderr, "deconstruct_server() error during pthread_join() %d", err);
+            fprintf(stderr, "deconstruct_server() error during pthread_join() %s", strerror(err));
+            *error = 0;
         }
     }
-    if (serverState != SERVER_DECONSTRUCTED)
+    if (serverState != SERVER_DECONSTRUCTED) {
         close(server->socket);
+        debug("Server deconstruct: close socket %d", server->socket)
+    }
     if (server->thread_list != NULL) {
         err = deconstruct_thread_list(server->thread_list);
         if (err == 0) {
@@ -144,27 +163,31 @@ _Noreturn void *serverWorker(void *args) {
     }
     while (1) {
         int isHandled = 1;
+        int clientSocket = -1;
         ClientConnection *con = (ClientConnection *) malloc(sizeof(ClientConnection));
         if (con == NULL) {
-            fputs("serverWorker() can't allocate memory", stderr);
+            fprintf(stderr, "serverWorker() can't allocate memory");
             abort();
         }
-        pthread_cleanup_push(free, con)
-                int clientSocket = accept(server->socket, &con->socket_address, &(server->address_len));
+        debug("serverWorker() create clint connection %p", con);
+        pthread_cleanup_push(freeConnectionServer, con)
+                clientSocket = accept(server->socket, &con->socket_address, &(server->address_len));
                 if (clientSocket != -1) {
                     con->socket = clientSocket;
                     err = add_thread_to_list(server->thread_list, acceptFunc, con, NULL);
+                    isHandled = 0;
                     if (err == 0) {
                         isHandled = 0;
-                    } else {
-                        close(clientSocket);
-                        fprintf(stderr, "Fail to create user connection thread: %s", strerror(err));
                     }
                 } else {
                     failServerThread(server, errno);
-                    pthread_exit(INT2VOIDP(-1));
+                    pthread_exit(INT2VOIDP(1));
                 }
         pthread_cleanup_pop(isHandled);
+        debug("Open client socket %d", clientSocket);
+        if (err != 0) {
+            fprintf(stderr, "Fail to create user connection thread: %s", strerror(err));
+        }
     }
 }
 
