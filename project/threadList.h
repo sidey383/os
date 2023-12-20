@@ -1,4 +1,7 @@
 #pragma once
+
+//#define DEBUG
+
 #include "debug.h"
 #include <pthread.h>
 

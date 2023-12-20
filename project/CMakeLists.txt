@@ -10,7 +10,6 @@ add_executable(project
         http.c
         tcp.c
         threadList.c
-        socketEcho.c
 )
 
 find_package(Threads REQUIRED)

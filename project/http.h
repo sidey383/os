@@ -1,9 +1,6 @@
 #pragma once
-#define DEBUG
+//#define DEBUG
 #include "debug.h"
-
-#define POLL_TIMEOUT 100
-#define BUFFER_LENGTH 64
 
 typedef struct HttpParameter HttpParameter;
 

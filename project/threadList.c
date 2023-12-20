@@ -1,4 +1,3 @@
-#define DEBUG
 #include "threadList.h"
 #include <stdlib.h>
 #include <stdio.h>

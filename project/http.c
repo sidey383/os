@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <unistd.h>
 #include <sys/socket.h>
 #include <poll.h>
@@ -10,6 +12,8 @@
 
 #define SPACE ' '
 
+#define POLL_TIMEOUT 100
+#define BUFFER_LENGTH 1024
 
 enum ReadStatus {
     READ_OK = 0,
@@ -122,7 +126,7 @@ static void increase_buffer(struct Buffer *buffer) {
 }
 
 enum ReadStatus read_buffer(struct Buffer *buffer, int *err) {
-    struct pollfd polls = {buffer->socket, POLLIN, 0};
+    struct pollfd polls = {buffer->socket, POLLIN | POLLRDHUP, 0};
     int status;
     status = poll(&polls, 1, POLL_TIMEOUT);
     if (status == -1) {
@@ -148,7 +152,7 @@ enum ReadStatus read_buffer(struct Buffer *buffer, int *err) {
         debug("Socket %d wrong", buffer->socket)
         return READ_SOCKET_WRONG;
     }
-    if ((polls.revents & POLLHUP) != 0) {
+    if ((polls.revents & (POLLHUP | POLLRDHUP)) != 0) {
         polls.revents = 0;
         debug("Socket %d close", buffer->socket)
         return READ_SOCKET_CLOSE;
@@ -168,7 +172,7 @@ enum ReadStatus read_buffer(struct Buffer *buffer, int *err) {
     return READ_OK;
 }
 
-static void clean_request_raw(void *p) {
+void clean_request_raw(void *p) {
     struct HttpRequestRaw *r = (struct HttpRequestRaw *) p;
     while (r->parameters != NULL) {
         void *pointer = r->parameters;
@@ -299,6 +303,51 @@ void build_request(struct HttpRequestRaw* rawData, HttpRequest* data) {
     }
 }
 
+static int equals_string(const char *str1, size_t size1, const char *str2, size_t size2) {
+    if (size1 != size2) {
+        return 0;
+    }
+    for (size_t i = 0; i < size1; i++) {
+        if (str1[i] != str2[i])
+            return 0;
+    }
+    return 1;
+}
+
+static size_t read_size(const char* val, size_t size) {
+    size_t result = 0;
+    for (int i = 0; i < size; i++) {
+        char c = val[i];
+        if (c < '0' || c > '9')
+            return -1;
+        result = result * 10 + c - '0';
+    }
+    return result;
+}
+
+enum ReadStatus add_content(struct HttpRequestRaw* rawData, int* error) {
+    struct HttpParameterRaw *dataLenParam = NULL;
+    enum ReadStatus status;
+    for (struct HttpParameterRaw *p = rawData->parameters; p != NULL; p = p->next) {
+        if (equals_string(rawData->buffer.data + p->name.pose, p->name.size, "Content-Length", 14)) {
+            dataLenParam = p;
+        }
+    }
+    size_t dataLength = 0;
+    if (dataLenParam != NULL) {
+        dataLength = read_size(rawData->buffer.data + dataLenParam->value.pose, dataLenParam->value.size);
+    }
+    if (dataLength == 0)
+        return READ_OK;
+    while (rawData->buffer.available - rawData->buffer.iterator < dataLength) {
+        status = read_buffer(&rawData->buffer, error);
+        if (status != READ_OK)
+            return status;
+    }
+    rawData->buffer.iterator += dataLength;
+    return READ_OK;
+}
+
 enum AcceptStatus accept_request(int socket, HttpRequest *data) {
     struct HttpRequestRaw requestRaw = {};
     enum ReadStatus readStatus;
@@ -370,6 +419,17 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
                     return ACCEPT_ERROR;
                 }
             } while (paramStatus != PARAM_NO_VALUE);
+            readStatus = add_content(&requestRaw, &err);
+            if (readStatus == READ_SOCKET_CLOSE) {
+                clean_request_raw(&requestRaw);
+                return ACCEPT_SOCKET_CLOSE;
+            }
+            if (IS_READ_SET_ERROR(readStatus)) {
+                fprintf(stderr, "Socket error: %s", strerror(err));
+            }
+            if (readStatus != READ_OK) {
+                return ACCEPT_ERROR;
+            }
             build_request(&requestRaw, data);
     pthread_cleanup_pop(1);
     return ACCEPT_OK;
