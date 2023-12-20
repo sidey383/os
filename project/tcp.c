@@ -20,6 +20,7 @@
 
 struct PollAction {
     enum EchoStatus (*func)(int, int, int *);
+
     short int flag;
 };
 
@@ -177,7 +178,7 @@ static _Noreturn void *serverWorker(void *args) {
             abort();
         }
         debug("serverWorker() create clint connection %p", con)
-        pthread_cleanup_push((void (*)(void*))tcp_deconstruct_connection_without_socket, con)
+        pthread_cleanup_push((void (*)(void *)) tcp_deconstruct_connection_without_socket, con)
                 clientSocket = accept(server->socket, &con->ip_address.address, &(server->ip_address.address_len));
                 if (clientSocket != -1) {
                     con->socket = clientSocket;
@@ -295,11 +296,11 @@ EchoStatus tcp_sockets_echo(int socket1, int socket2, int *error) {
     int status;
     enum EchoStatus result;
     struct PollAction actions[] = {
-            {tcp_socket_wrong, POLLNVAL},
-            {tcp_socket_error, POLLERR},
+            {tcp_socket_wrong,         POLLNVAL},
+            {tcp_socket_error,         POLLERR},
             {tcp_echo_packet_priority, POLLPRI},
-            {tcp_echo_packet,  POLLIN},
-            {tcp_socket_close, POLLHUP | POLLRDHUP}
+            {tcp_echo_packet,          POLLIN},
+            {tcp_socket_close,         POLLHUP | POLLRDHUP}
     };
 
     struct pollfd polls[2] = {
@@ -392,30 +393,35 @@ char *tpc_address_to_string(struct sockaddr *addr, char *str, size_t strSize) {
     return str;
 }
 
+
+//TODO: fix segfault?
 Connection *tcp_create_connection(IpAddress *address, int *error) {
     Connection *con = (Connection *) malloc(sizeof(Connection));
-    int status;
+    int status = -1;
     if (con == NULL) {
         fprintf(stderr, "Cannot allocate memory for a connection\n");
         abort();
     }
     debug("Create connection %p", con)
-    con->ip_address = *address;
-    con->socket = socket(con->ip_address.address.sa_family, SOCK_STREAM, 0);
-    if (con->socket == -1) {
-        tcp_deconstruct_connection_without_socket(con);
-        (*error) = errno;
-        return NULL;
-    }
-    pthread_cleanup_push((void (*)(void*))tcp_deconstruct_connection, con)
+    con->socket = -1;
+    pthread_cleanup_push((void (*)(void *)) tcp_deconstruct_connection_without_socket, con)
+            con->ip_address = *address;
+            con->socket = socket(con->ip_address.address.sa_family, SOCK_STREAM, 0);
+            if (con->socket == -1) {
+                (*error) = errno;
+                tcp_deconstruct_connection_without_socket(con);
+                return NULL;
+            }
+    pthread_cleanup_pop(0);
+    pthread_cleanup_push((void (*)(void *)) tcp_deconstruct_connection, con)
             status = connect(con->socket, &address->address, address->address_len);
             if (status == -1) {
-                debug("Socket connect error %s", strerror(errno));
+                debug("Socket connect error %s", strerror(errno))
                 (*error) = errno;
             } else {
                 debug("Connect to socket %d", con->socket)
             }
-    pthread_cleanup_pop(status == -1);
+    pthread_cleanup_pop(0);
     if (status == -1) {
         con = NULL;
     }
