@@ -9,7 +9,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define SERVER_ADDRESS htonl(INADDR_LOOPBACK)
+#define SERVER_ADDRESS htonl(INADDR_ANY)
 #define SERVER_PORT htons(8080)
 
 static int equals_string(const char *str1, size_t size1, const char *str2, size_t size2) {
