@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 
 struct ThreadInitiatorArgs {
     ThreadList *list;
     void *thread_data;
+
     void (*start)(void *args);
 };
 
@@ -91,11 +93,7 @@ int remove_thread_from_list(ThreadList *list, pthread_t thread) {
     debug("remove_thread_from_list(): deconstruct  thread %p\n", nodeToDelete)
     pthread_t targetThread = nodeToDelete->thread;
     free(nodeToDelete);
-    if (pthread_equal(pthread_self(), targetThread)) {
-        //The thread remove itself, nothing to wait.
-        pthread_detach(pthread_self());
-        pthread_exit(NULL);
-    } else {
+    if (!pthread_equal(pthread_self(), targetThread)) {
         //Other thread stop this node, wait for terminate.
         pthread_cancel(targetThread);
         pthread_join(targetThread, NULL);
@@ -103,26 +101,32 @@ int remove_thread_from_list(ThreadList *list, pthread_t thread) {
     return 0;
 }
 
-static void clean_self(void *arg) {
+void clean_self(ThreadList *arg) {
     ThreadList *list = (ThreadList *) arg;
     int err;
     err = remove_thread_from_list(list, pthread_self());
+    // err == 0 thread terminate itself, detach this thread
+    if (err == 0) {
+        pthread_detach(pthread_self());
+        return;
+    }
+    // err == ESRCH - thread already canceled, noting to do
+    // err - other error - unknown state, delegate thread terminate for deconstruct_thread_list
     if (err != ESRCH) {
         fprintf(stderr, "Thread node stop error %s\n", strerror(err));
     }
-    pthread_exit(NULL);
 }
 
 void *thread_creator(void *a) {
     struct ThreadInitiatorArgs *args = (struct ThreadInitiatorArgs *) a;
-    pthread_cleanup_push(clean_self, args->list)
+    ThreadList *list = args->list;
+    pthread_cleanup_push((void (*)(void *)) clean_self, list)
             pthread_cleanup_push(free, args)
-                    pthread_cleanup_push(args->list->cleanup_func, args->thread_data)
+                    pthread_cleanup_push(list->cleanup_func, args->thread_data)
                             args->start(args->thread_data);
                     pthread_cleanup_pop(1);
             pthread_cleanup_pop(1);
     pthread_cleanup_pop(1);
-    // Unreachable
     return NULL;
 }
 

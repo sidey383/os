@@ -154,7 +154,7 @@ enum ReadStatus read_buffer(struct Buffer *buffer, int *err) {
     }
     if ((polls.revents & (POLLHUP | POLLRDHUP)) != 0) {
         polls.revents = 0;
-        debug("Socket %d close", buffer->socket)
+        debug("Socket %d closed", buffer->socket)
         return READ_SOCKET_CLOSE;
     }
     if ((polls.revents & POLLIN) != 0) {
@@ -173,6 +173,16 @@ enum ReadStatus read_buffer(struct Buffer *buffer, int *err) {
 }
 
 void clean_request_raw(void *p) {
+    struct HttpRequestRaw *r = (struct HttpRequestRaw *) p;
+    while (r->parameters != NULL) {
+        void *pointer = r->parameters;
+        free(pointer);
+        r->parameters = r->parameters->next;
+    }
+    clean_buffer(&r->buffer);
+}
+
+void clean_request_raw_ok(void *p) {
     struct HttpRequestRaw *r = (struct HttpRequestRaw *) p;
     while (r->parameters != NULL) {
         void *pointer = r->parameters;
@@ -266,7 +276,7 @@ enum ParamReadStatus read_param(struct HttpRequestRaw *request, int *error) {
         valueStart++;
     }
     //Ignore last ' ' if it exists
-    if (valueSize > 0 && request->buffer.data[lineValue.pose + valueSize - 1] == ' ') {
+    if (valueSize > 0 && request->buffer.data[lineValue.pose + valueStart + valueSize - 1] == ' ') {
         valueSize--;
     }
     struct HttpParameterRaw *param = create_param(request);
@@ -353,7 +363,7 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
     enum ReadStatus readStatus;
     enum ParamReadStatus paramStatus;
     int err;
-    pthread_cleanup_push(clean_request_raw, &requestRaw)
+    pthread_cleanup_push(clean_request_raw_ok, &requestRaw)
             init_buffer(&requestRaw.buffer, socket);
             readStatus = read_buffer(&requestRaw.buffer, &err);
             if (readStatus == READ_SOCKET_CLOSE) {
@@ -364,6 +374,7 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
                 fprintf(stderr, "Socket error: %s", strerror(err));
             }
             if (readStatus != READ_OK) {
+                clean_request_raw(&requestRaw);
                 return ACCEPT_ERROR;
             }
             while (!parse_space_value(&requestRaw.method, &requestRaw.buffer)) {
@@ -376,6 +387,7 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
                     fprintf(stderr, "Socket error: %s", strerror(err));
                 }
                 if (readStatus != READ_OK) {
+                    clean_request_raw(&requestRaw);
                     return ACCEPT_ERROR;
                 }
             }
@@ -389,6 +401,7 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
                     fprintf(stderr, "Socket error: %s", strerror(err));
                 }
                 if (readStatus != READ_OK) {
+                    clean_request_raw(&requestRaw);
                     return ACCEPT_ERROR;
                 }
             }
@@ -402,6 +415,7 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
                     fprintf(stderr, "Socket error: %s", strerror(err));
                 }
                 if (readStatus != READ_OK) {
+                    clean_request_raw(&requestRaw);
                     return ACCEPT_ERROR;
                 }
             }
@@ -428,6 +442,7 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
                 fprintf(stderr, "Socket error: %s", strerror(err));
             }
             if (readStatus != READ_OK) {
+                clean_request_raw(&requestRaw);
                 return ACCEPT_ERROR;
             }
             build_request(&requestRaw, data);

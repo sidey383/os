@@ -170,7 +170,8 @@ static _Noreturn void *serverWorker(void *args) {
     if (err != 0)
         failServerThread(server, errno);
     while (1) {
-        int isHandled = 1;
+        int handleClientSocket;
+        int handleConnection;
         int clientSocket;
         Connection *con = (Connection *) malloc(sizeof(Connection));
         if (con == NULL) {
@@ -183,12 +184,19 @@ static _Noreturn void *serverWorker(void *args) {
                 if (clientSocket != -1) {
                     con->socket = clientSocket;
                     err = add_thread_to_list(server->thread_list, acceptFunc, con, NULL);
-                    isHandled = err != 0;
+                    handleConnection = err != 0;
+                    handleClientSocket = handleConnection;
                 } else {
+                    handleClientSocket = 0;
+                    handleConnection = 1;
                     failServerThread(server, errno);
                 }
-        pthread_cleanup_pop(isHandled);
-        debug("Open client socket %d", clientSocket)
+        pthread_cleanup_pop(0);
+        if (handleConnection)
+            tcp_deconstruct_connection_without_socket(con);
+        if (handleClientSocket) {
+            close(clientSocket);
+        }
         if (err != 0) {
             fprintf(stderr, "Fail to create user connection thread: %s", strerror(err));
         }
@@ -271,7 +279,9 @@ static enum EchoStatus tcp_echo_packet_priority(int in, int out, int *error) {
         }
         sendSize += s;
     }
+#ifdef DEBUG
     write(STDOUT_FILENO, buffer, recvSize);
+#endif
     return ECHO_OK;
 }
 
@@ -394,7 +404,6 @@ char *tpc_address_to_string(struct sockaddr *addr, char *str, size_t strSize) {
 }
 
 
-//TODO: fix segfault?
 Connection *tcp_create_connection(IpAddress *address, int *error) {
     Connection *con = (Connection *) malloc(sizeof(Connection));
     int status = -1;
