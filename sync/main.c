@@ -193,7 +193,7 @@ int main() {
         fprintf(stderr, "Storage create error\n");
         abort();
     }
-    fill_storage(storage, 1000);
+    fill_storage(storage, 100);
     struct CmpArgs cmpArgs[3] = {
         {storage, equal, &eq_iteration_count, &eq_iteration_state, 1},
         {storage, great, &gr_iteration_count, &gr_iteration_state, 2},

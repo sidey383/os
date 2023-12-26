@@ -21,7 +21,7 @@ typedef enum _SwapStatus SwapStatus;
 
 struct _NodeCore {
     Node *next;
-    pthread_spinlock_t lock;
+    pthread_rwlock_t lock;
 };
 
 struct _Node {

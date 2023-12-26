@@ -14,9 +14,9 @@ Storage *create_storage() {
     if (st == NULL)
         return NULL;
     st->first.next = NULL;
-    err = pthread_spin_init(&st->first.lock, PTHREAD_PROCESS_PRIVATE);
+    err = pthread_rwlock_init(&st->first.lock, NULL);
     if (err != 0) {
-        fprintf(stderr, "Can't create spinlock: %s\n", strerror(err));
+        fprintf(stderr, "Can't create rwlocklock: %s\n", strerror(err));
         free(st);
         return NULL;
     }
@@ -30,31 +30,31 @@ size_t strlenVal(const char *s){
 
 int add_storage_value(Storage* storage, const char* val) {
     int err;
-    err = pthread_spin_lock(&storage->first.lock);
+    err = pthread_rwlock_wrlock(&storage->first.lock);
     if (err != 0)
         return err;
     Node* node = malloc(sizeof(Node));
     if (node == NULL)
         return ENOMEM;
     memcpy(node->value, val, strlenVal(val));
-    err = pthread_spin_init(&node->core.lock, PTHREAD_PROCESS_PRIVATE);
+    err = pthread_rwlock_init(&node->core.lock, NULL);
     if (err != 0) {
         free(node);
         return err;
     }
     node->core.next = storage->first.next;
     storage->first.next = node;
-    err = pthread_spin_unlock(&storage->first.lock);
+    err = pthread_rwlock_unlock(&storage->first.lock);
     if (err != 0)
         return err;
     return 0;
 }
 
 void free_storage(Storage* storage) {
-    pthread_spin_destroy(&storage->first.lock);
+    pthread_rwlock_destroy(&storage->first.lock);
     Node* i = storage->first.next;
     while (i != NULL) {
-        pthread_spin_destroy(&i->core.lock);
+        pthread_rwlock_destroy(&i->core.lock);
         Node* tmp = i;
         i = i->core.next;
         free(tmp);
@@ -64,16 +64,16 @@ void free_storage(Storage* storage) {
 
 int start_iterator(StorageIterator *iterator, Storage *storage) {
     int error;
-    error = pthread_spin_lock(&storage->first.lock);
+    error = pthread_rwlock_rdlock(&storage->first.lock);
     if (error != 0)
         return error;
     iterator->current_node = storage->first.next;
     if (iterator->current_node == NULL) {
-        pthread_spin_unlock(&storage->first.lock);
+        pthread_rwlock_unlock(&storage->first.lock);
         return 0;
     }
-    error = pthread_spin_lock(&iterator->current_node->core.lock);
-    pthread_spin_unlock(&storage->first.lock);
+    error = pthread_rwlock_rdlock(&iterator->current_node->core.lock);
+    pthread_rwlock_unlock(&storage->first.lock);
     if (error != 0)
         return error;
     return 0;
@@ -83,7 +83,7 @@ int stop_iterator(StorageIterator *iterator) {
     int error;
     if (iterator->current_node == NULL)
         return 0;
-    error = pthread_spin_unlock(&iterator->current_node->core.lock);
+    error = pthread_rwlock_unlock(&iterator->current_node->core.lock);
     if (error != 0)
         return error;
     iterator->current_node = 0;
@@ -104,12 +104,12 @@ NextStatus next_iterator(StorageIterator *iterator) {
     NodeCore *core = &iterator->current_node->core;
     Node *next = core->next;
     if (next != NULL) {
-        error = pthread_spin_lock(&next->core.lock);
+        error = pthread_rwlock_rdlock(&next->core.lock);
         if (error != 0)
             return NEXT_LOCK_ERROR;
     }
     iterator->current_node = next;
-    error = pthread_spin_unlock(&core->lock);
+    error = pthread_rwlock_unlock(&core->lock);
     if (error != 0)
         return NEXT_UNLOCK_ERROR;
     return NEXT_OK;
@@ -118,14 +118,14 @@ NextStatus next_iterator(StorageIterator *iterator) {
 int start_active_iterator(StorageActiveIterator *iterator, Storage *storage) {
     int error;
     iterator->core = &storage->first;
-    error = pthread_spin_lock(&iterator->core->lock);
+    error = pthread_rwlock_wrlock(&iterator->core->lock);
     if (error != 0)
         return error;
     iterator->first_node = iterator->core->next;
     if (iterator->first_node != NULL) {
-        error = pthread_spin_lock(&iterator->first_node->core.lock);
+        error = pthread_rwlock_wrlock(&iterator->first_node->core.lock);
         if (error != 0) {
-            pthread_spin_unlock(&iterator->core->lock);
+            pthread_rwlock_unlock(&iterator->core->lock);
             return error;
         }
         iterator->second_node = iterator->first_node->core.next;
@@ -134,10 +134,10 @@ int start_active_iterator(StorageActiveIterator *iterator, Storage *storage) {
     }
 
     if (iterator->second_node != NULL) {
-        error = pthread_spin_lock(&iterator->second_node->core.lock);
+        error = pthread_rwlock_wrlock(&iterator->second_node->core.lock);
         if (error != 0) {
-            pthread_spin_unlock(&iterator->core->lock);
-            pthread_spin_unlock(&iterator->first_node->core.lock);
+            pthread_rwlock_unlock(&iterator->core->lock);
+            pthread_rwlock_unlock(&iterator->first_node->core.lock);
             return error;
         }
     }
@@ -147,17 +147,17 @@ int start_active_iterator(StorageActiveIterator *iterator, Storage *storage) {
 int stop_active_iterator(StorageActiveIterator *iterator) {
     int error;
     if (iterator->core != NULL) {
-        error = pthread_spin_unlock(&iterator->core->lock);
+        error = pthread_rwlock_unlock(&iterator->core->lock);
         if (error != 0)
             return error;
     }
     if (iterator->first_node != NULL) {
-        error = pthread_spin_unlock(&iterator->first_node->core.lock);
+        error = pthread_rwlock_unlock(&iterator->first_node->core.lock);
         if (error != 0)
             return error;
     }
     if (iterator->second_node != NULL) {
-        error = pthread_spin_unlock(&iterator->second_node->core.lock);
+        error = pthread_rwlock_unlock(&iterator->second_node->core.lock);
         if (error != 0)
             return error;
     }
@@ -171,7 +171,7 @@ NextStatus next_active_iterator(StorageActiveIterator *iterator) {
     // check iterator on end
     if (iterator->first_node == NULL) {
         if (iterator->core != NULL) {
-            error = pthread_spin_unlock(&iterator->core->lock);
+            error = pthread_rwlock_unlock(&iterator->core->lock);
             if (error != 0)
                 return NEXT_UNLOCK_ERROR;
             iterator->core = NULL;
@@ -183,7 +183,7 @@ NextStatus next_active_iterator(StorageActiveIterator *iterator) {
     if (iterator->second_node != NULL) {
         next = iterator->second_node->core.next;
         if (next != NULL) {
-            error = pthread_spin_lock(&next->core.lock);
+            error = pthread_rwlock_wrlock(&next->core.lock);
             if (error != 0) {
                 fprintf(stderr, "next_active_iterator() lock error: %s\n", strerror(error));
                 return NEXT_LOCK_ERROR;
@@ -194,13 +194,13 @@ NextStatus next_active_iterator(StorageActiveIterator *iterator) {
     iterator->core = &iterator->first_node->core;
     iterator->first_node = iterator->second_node;
     iterator->second_node = next;
-    error = pthread_spin_unlock(&core->lock);
+    error = pthread_rwlock_unlock(&core->lock);
     if (error != 0)
         return NEXT_UNLOCK_ERROR;
     //Reach end, free core
     if (iterator->first_node == NULL) {
         if (iterator->core != NULL) {
-            error = pthread_spin_unlock(&iterator->core->lock);
+            error = pthread_rwlock_unlock(&iterator->core->lock);
             if (error != 0)
                 return NEXT_UNLOCK_ERROR;
             iterator->core = NULL;
