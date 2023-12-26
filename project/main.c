@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <signal.h>
 
 #define SERVER_ADDRESS htonl(INADDR_ANY)
 #define SERVER_PORT htons(8080)
@@ -203,9 +204,28 @@ void acceptFunc(Connection *con) {
     pthread_cleanup_pop(1);
 }
 
+void pipeAction(int sig, siginfo_t* info, void* ucontext) {
+    char buf[4094];
+    size_t _write = 0;
+    int size = snprintf(buf, 4094, "[%d] handle SIGPIPE from %d\n", gettid(), info->si_pid);
+    while (_write < size) {
+        size_t w = write(STDOUT_FILENO, buf, size - _write);
+        if (w == -1)
+            break;
+        _write += w;
+    }
+}
+
 int main() {
+    //Create handler for sigpipe
+    //He may end the process unexpectedly
+    struct sigaction act;
+    act.sa_sigaction = pipeAction;
+    act.sa_flags = SA_SIGINFO;
+    sigaction(SIGPIPE, &act, NULL);
     debug("Main: pid %d\n", getpid())
     struct sockaddr_in addr;
+
     addr.sin_family = AF_INET;
     addr.sin_port = SERVER_PORT;
     addr.sin_addr.s_addr = SERVER_ADDRESS;
