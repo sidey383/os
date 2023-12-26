@@ -69,14 +69,16 @@ void acceptFunc(Connection *con) {
         case ACCEPT_OK:
             break;
         case ACCEPT_ERROR:
-            deconstruct_request(&request);
             fprintf(stderr, "[%u] Request parse error\n", gettid());
             send_status(con->socket, 400, "Wrong http request");
             return;
         case ACCEPT_SOCKET_CLOSE:
-            deconstruct_request(&request);
             fprintf(stderr, "[%u] Socket close in time of parser request\n", gettid());
             send_status(con->socket, 400, "Socket closed");
+            return;
+        case ACCEPT_NO_MEMORY:
+            fprintf(stderr, "[%u] Not enough memory\n", gettid());
+            send_status(con->socket, 500, "Internal error");
             return;
     }
 
@@ -154,7 +156,7 @@ void acceptFunc(Connection *con) {
     EchoStatus echoStatus;
     if (dst_con == NULL) {
         deconstruct_request(&request);
-        fprintf(stderr, "[%u] Can't create server connection %s\n", gettid(), strerror(error));
+        fprintf(stderr, "[%u] Can't create server connection: %s\n", gettid(), strerror(error));
         send_status(con->socket, 500, "Can't connect to server");
         return;
     }

@@ -21,24 +21,28 @@ enum ReadStatus {
     READ_SOCKET_ERROR = -2,
     READ_SOCKET_WRONG = -3,
     READ_POLL_ERROR = -4,
-    READ_SOCKET_CLOSE = -5
+    READ_SOCKET_CLOSE = -5,
+    READ_NO_MEMORY = -6
 };
 
 #define IS_READ_SET_ERROR(status) (\
 status == READ_ERROR ||            \
 status == READ_SOCKET_ERROR ||     \
-status == READ_POLL_ERROR          \
+status == READ_POLL_ERROR ||       \
+status == READ_NO_MEMORY \
 )
 
 enum ParamReadStatus {
-    PARAM_NO_VALUE = 1,
+    PARAM_NO_MEMORY = 3,
     PARAM_WRONG_DATA = 2,
+    PARAM_NO_VALUE = 1,
     PARAM_OK = 0,
     PARAM_READ_ERROR = -1,
     PARAM_READ_SOCKET_ERROR = -2,
     PARAM_READ_SOCKET_WRONG = -3,
     PARAM_READ_POLL_ERROR = -4,
-    PARAM_READ_SOCKET_CLOSE = -5
+    PARAM_READ_SOCKET_CLOSE = -5,
+    PARAM_READ_NO_MEMORY = -6
 };
 
 #define IS_PARAM_READ_ERROR(status) (\
@@ -46,9 +50,23 @@ status == PARAM_READ_ERROR ||        \
 status == PARAM_READ_SOCKET_ERROR || \
 status == PARAM_READ_SOCKET_WRONG || \
 status == PARAM_READ_POLL_ERROR ||   \
-status == PARAM_READ_SOCKET_CLOSE    \
-)
+status == PARAM_READ_SOCKET_CLOSE || \
+status == PARAM_READ_NO_MEMORY )
 
+#define HANDLE_READ_STATUS(readStatus, requestRaw) { \
+    if (readStatus == READ_SOCKET_CLOSE) { \
+        clean_request_raw(&requestRaw);\
+        return ACCEPT_SOCKET_CLOSE; \
+    } \
+    if (readStatus == READ_NO_MEMORY) { \
+        clean_request_raw(&requestRaw); \
+        return ACCEPT_NO_MEMORY;                             \
+    }\
+    if (readStatus != READ_OK) { \
+        clean_request_raw(&requestRaw); \
+        return ACCEPT_ERROR; \
+    }                                              \
+}
 
 struct Buffer {
     char *data;
@@ -77,16 +95,16 @@ struct HttpRequestRaw {
     struct HttpParameterRaw *parameters;
 };
 
-static void init_buffer(struct Buffer *buffer, int socket) {
+static int init_buffer(struct Buffer *buffer, int socket) {
     buffer->available = 0;
     buffer->iterator = 0;
     buffer->socket = socket;
     buffer->data = (char *) malloc(sizeof(char) * BUFFER_LENGTH);
     if (buffer->data == NULL) {
-        fprintf(stderr, "Can't allocate memory for buffer, abort");
-        abort();
+        return ENOMEM;
     }
     buffer->data_len = BUFFER_LENGTH;
+    return 0;
 }
 
 static void clean_buffer(struct Buffer *buffer) {
@@ -109,20 +127,20 @@ static char *peek_buffer(struct Buffer *buffer) {
     return data;
 }
 
-static void increase_buffer(struct Buffer *buffer) {
+static int increase_buffer(struct Buffer *buffer) {
     size_t newLen = buffer->data_len * 3 / 2 + 1;
     if (newLen < BUFFER_LENGTH)
         newLen = BUFFER_LENGTH;
     char *newData = (char *) malloc(sizeof(char) * newLen);
     if (newData == NULL) {
-        fprintf(stderr, "Can't allocate memory for data buffer, abort");
-        abort();
+        return ENOMEM;
     }
     memcpy(newData, buffer->data, buffer->available);
     memset(newData + buffer->available, 0, newLen - buffer->available);
     free(buffer->data);
     buffer->data = newData;
     buffer->data_len = newLen;
+    return 0;
 }
 
 enum ReadStatus read_buffer(struct Buffer *buffer, int *err) {
@@ -158,8 +176,13 @@ enum ReadStatus read_buffer(struct Buffer *buffer, int *err) {
         return READ_SOCKET_CLOSE;
     }
     if ((polls.revents & POLLIN) != 0) {
-        if (buffer->available >= buffer->data_len)
-            increase_buffer(buffer);
+        if (buffer->available >= buffer->data_len) {
+            status = increase_buffer(buffer);
+            if (status != 0) {
+                (*err) = ENOMEM;
+                return READ_NO_MEMORY;
+            }
+        }
         polls.revents = (short) (polls.revents & (~POLLIN));
         size_t size = recv(buffer->socket, buffer->data + buffer->available, buffer->data_len - buffer->available, 0);
         if (size == -1) {
@@ -231,8 +254,7 @@ struct HttpParameterRaw *create_param(struct HttpRequestRaw *request) {
     }
     struct HttpParameterRaw *newParam = (struct HttpParameterRaw *) malloc(sizeof(struct HttpParameterRaw));
     if (newParam == NULL) {
-        fprintf(stderr, "Can't allocate memory for parse http, abort");
-        abort();
+        return NULL;
     }
     newParam->next = NULL;
     (*last) = newParam;
@@ -245,7 +267,7 @@ enum ParamReadStatus read_param(struct HttpRequestRaw *request, int *error) {
     enum ReadStatus readStatus;
     size_t nameSize;
     size_t valueStart;
-    size_t valueSize ;
+    size_t valueSize;
     // Select full line
     while (!parse_end_line_value(&lineValue, &request->buffer)) {
         readStatus = read_buffer(&request->buffer, &err);
@@ -280,6 +302,8 @@ enum ParamReadStatus read_param(struct HttpRequestRaw *request, int *error) {
         valueSize--;
     }
     struct HttpParameterRaw *param = create_param(request);
+    if (param == NULL)
+        return PARAM_NO_MEMORY;
     param->value.size = valueSize;
     param->value.pose = lineValue.pose + valueStart;
     param->name.size = nameSize;
@@ -287,7 +311,7 @@ enum ParamReadStatus read_param(struct HttpRequestRaw *request, int *error) {
     return PARAM_OK;
 }
 
-void build_request(struct HttpRequestRaw* rawData, HttpRequest* data) {
+int build_request(struct HttpRequestRaw *rawData, HttpRequest *data) {
     data->request_size = rawData->buffer.iterator;
     data->request = peek_buffer(&rawData->buffer);
     data->protocol = data->request + rawData->protocol.pose;
@@ -296,12 +320,11 @@ void build_request(struct HttpRequestRaw* rawData, HttpRequest* data) {
     data->uri_size = rawData->uri.size;
     data->method = data->request + rawData->method.pose;
     data->method_size = rawData->method.size;
-    HttpParameter** paramPlace = &data->parameters;
-    for (struct HttpParameterRaw* rp = rawData->parameters; rp != NULL; rp = rp->next) {
-        HttpParameter* param = (HttpParameter*) malloc(sizeof(HttpParameter));
+    HttpParameter **paramPlace = &data->parameters;
+    for (struct HttpParameterRaw *rp = rawData->parameters; rp != NULL; rp = rp->next) {
+        HttpParameter *param = (HttpParameter *) malloc(sizeof(HttpParameter));
         if (param == NULL) {
-            fprintf(stderr, "Can't allocate memory for parse http, abort");
-            abort();
+            return ENOMEM;
         }
         param->next = NULL;
         param->name = data->request + rp->name.pose;
@@ -311,6 +334,7 @@ void build_request(struct HttpRequestRaw* rawData, HttpRequest* data) {
         (*paramPlace) = param;
         paramPlace = &param->next;
     }
+    return 0;
 }
 
 static int equals_string(const char *str1, size_t size1, const char *str2, size_t size2) {
@@ -324,7 +348,7 @@ static int equals_string(const char *str1, size_t size1, const char *str2, size_
     return 1;
 }
 
-static size_t read_size(const char* val, size_t size) {
+static size_t read_size(const char *val, size_t size) {
     size_t result = 0;
     for (int i = 0; i < size; i++) {
         char c = val[i];
@@ -335,7 +359,7 @@ static size_t read_size(const char* val, size_t size) {
     return result;
 }
 
-enum ReadStatus add_content(struct HttpRequestRaw* rawData, int* error) {
+enum ReadStatus add_content(struct HttpRequestRaw *rawData, int *error) {
     struct HttpParameterRaw *dataLenParam = NULL;
     enum ReadStatus status;
     for (struct HttpParameterRaw *p = rawData->parameters; p != NULL; p = p->next) {
@@ -364,66 +388,33 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
     enum ParamReadStatus paramStatus;
     int err;
     pthread_cleanup_push(clean_request_raw_ok, &requestRaw)
-            init_buffer(&requestRaw.buffer, socket);
+            err = init_buffer(&requestRaw.buffer, socket);
+            if (err != 0) {
+                return ACCEPT_NO_MEMORY;
+            }
             readStatus = read_buffer(&requestRaw.buffer, &err);
-            if (readStatus == READ_SOCKET_CLOSE) {
-                clean_request_raw(&requestRaw);
-                return ACCEPT_SOCKET_CLOSE;
-            }
-            if (IS_READ_SET_ERROR(readStatus)) {
-                fprintf(stderr, "Socket error: %s", strerror(err));
-            }
-            if (readStatus != READ_OK) {
-                clean_request_raw(&requestRaw);
-                return ACCEPT_ERROR;
-            }
+            HANDLE_READ_STATUS(readStatus, requestRaw)
             while (!parse_space_value(&requestRaw.method, &requestRaw.buffer)) {
                 readStatus = read_buffer(&requestRaw.buffer, &err);
-                if (readStatus == READ_SOCKET_CLOSE) {
-                    clean_request_raw(&requestRaw);
-                    return ACCEPT_SOCKET_CLOSE;
-                }
-                if (IS_READ_SET_ERROR(readStatus)) {
-                    fprintf(stderr, "Socket error: %s", strerror(err));
-                }
-                if (readStatus != READ_OK) {
-                    clean_request_raw(&requestRaw);
-                    return ACCEPT_ERROR;
-                }
+                HANDLE_READ_STATUS(readStatus, requestRaw)
             }
             while (!parse_space_value(&requestRaw.uri, &requestRaw.buffer)) {
                 readStatus = read_buffer(&requestRaw.buffer, &err);
-                if (readStatus == READ_SOCKET_CLOSE) {
-                    clean_request_raw(&requestRaw);
-                    return ACCEPT_SOCKET_CLOSE;
-                }
-                if (IS_READ_SET_ERROR(readStatus)) {
-                    fprintf(stderr, "Socket error: %s", strerror(err));
-                }
-                if (readStatus != READ_OK) {
-                    clean_request_raw(&requestRaw);
-                    return ACCEPT_ERROR;
-                }
+                HANDLE_READ_STATUS(readStatus, requestRaw)
             }
             while (!parse_end_line_value(&requestRaw.protocol, &requestRaw.buffer)) {
                 readStatus = read_buffer(&requestRaw.buffer, &err);
-                if (readStatus == READ_SOCKET_CLOSE) {
-                    clean_request_raw(&requestRaw);
-                    return ACCEPT_SOCKET_CLOSE;
-                }
-                if (IS_READ_SET_ERROR(readStatus)) {
-                    fprintf(stderr, "Socket error: %s", strerror(err));
-                }
-                if (readStatus != READ_OK) {
-                    clean_request_raw(&requestRaw);
-                    return ACCEPT_ERROR;
-                }
+                HANDLE_READ_STATUS(readStatus, requestRaw)
             }
             do {
                 paramStatus = read_param(&requestRaw, &err);
                 if (paramStatus == PARAM_READ_SOCKET_CLOSE) {
                     clean_request_raw(&requestRaw);
                     return ACCEPT_SOCKET_CLOSE;
+                }
+                if (paramStatus == PARAM_NO_MEMORY) {
+                    clean_request_raw(&requestRaw);
+                    return ACCEPT_NO_MEMORY;
                 }
                 if (IS_READ_SET_ERROR(paramStatus)) {
                     fprintf(stderr, "Socket error: %s", strerror(err));
@@ -434,26 +425,21 @@ enum AcceptStatus accept_request(int socket, HttpRequest *data) {
                 }
             } while (paramStatus != PARAM_NO_VALUE);
             readStatus = add_content(&requestRaw, &err);
-            if (readStatus == READ_SOCKET_CLOSE) {
+            HANDLE_READ_STATUS(readStatus, requestRaw)
+            err = build_request(&requestRaw, data);
+            if (err == ENOMEM) {
+                deconstruct_request(data);
                 clean_request_raw(&requestRaw);
-                return ACCEPT_SOCKET_CLOSE;
+                return ACCEPT_NO_MEMORY;
             }
-            if (IS_READ_SET_ERROR(readStatus)) {
-                fprintf(stderr, "Socket error: %s", strerror(err));
-            }
-            if (readStatus != READ_OK) {
-                clean_request_raw(&requestRaw);
-                return ACCEPT_ERROR;
-            }
-            build_request(&requestRaw, data);
     pthread_cleanup_pop(1);
     return ACCEPT_OK;
 }
 
-void deconstruct_request(HttpRequest* request) {
+void deconstruct_request(HttpRequest *request) {
     free(request->request);
-    for (HttpParameter* p = request->parameters; p != NULL;) {
-        HttpParameter* tmp = p->next;
+    for (HttpParameter *p = request->parameters; p != NULL;) {
+        HttpParameter *tmp = p->next;
         free(p);
         p = tmp;
     }

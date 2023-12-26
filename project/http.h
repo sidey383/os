@@ -29,7 +29,8 @@ struct HttpRequest {
 enum AcceptStatus {
     ACCEPT_OK = 0,
     ACCEPT_ERROR = -1,
-    ACCEPT_SOCKET_CLOSE = -2
+    ACCEPT_SOCKET_CLOSE = -2,
+    ACCEPT_NO_MEMORY = -3
 };
 
 enum AcceptStatus accept_request(int socket, HttpRequest* request);

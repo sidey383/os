@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
 
 struct ThreadInitiatorArgs {
     ThreadList *list;
@@ -12,11 +11,14 @@ struct ThreadInitiatorArgs {
     void (*start)(void *args);
 };
 
+/**
+ * Return
+ * new thread list or NULL on fail
+ * **/
 ThreadList *create_thread_list(void (*_cleanup_func)(void *)) {
     ThreadList *list = (ThreadList *) malloc(sizeof(ThreadList));
     if (list == NULL) {
-        fputs("create_thread_list() can't allocate memory\n", stderr);
-        abort();
+        return NULL;
     }
     list->first = NULL;
     list->cleanup_func = _cleanup_func;
@@ -130,17 +132,23 @@ void *thread_creator(void *a) {
     return NULL;
 }
 
+/**
+ * Return
+ * 0 - success
+ * ENOMEM - can't allocate memory
+ * all errors from pthread_create
+ * all errors of pthread_mutex_lock
+ * **/
 int add_thread_to_list(ThreadList *list, void (*_start_routine)(void *args), void *threadData, pthread_t *thread) {
     int err;
     ThreadNode *node = (ThreadNode *) malloc(sizeof(ThreadNode));
     if (node == NULL) {
-        fputs("add_thread_to_list() can't allocate memory\n", stderr);
-        abort();
+        return ENOMEM;
     }
     struct ThreadInitiatorArgs *creatorArgs = (struct ThreadInitiatorArgs *) malloc(sizeof(struct ThreadInitiatorArgs));
     if (creatorArgs == NULL) {
-        fputs("add_thread_to_list() can't allocate memory\n", stderr);
-        abort();
+        free(node);
+        return ENOMEM;
     }
     creatorArgs->list = list;
     creatorArgs->start = _start_routine;

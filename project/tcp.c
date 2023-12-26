@@ -40,8 +40,7 @@ TCPServer *tcp_create_server(struct sockaddr *socket_address, socklen_t address_
     TCPServer *server = (TCPServer *) malloc(sizeof(TCPServer));
     int err;
     if (server == NULL) {
-        fprintf(stderr, "Cannot allocate memory for a server\n");
-        abort();
+        return NULL;
     }
     pthread_mutexattr_t mutex_attr;
     pthread_mutexattr_init(&mutex_attr);
@@ -74,6 +73,15 @@ TCPServer *tcp_create_server(struct sockaddr *socket_address, socklen_t address_
     }
     server->state = SERVER_NOT_STARTED;
     server->thread_list = create_thread_list((void (*)(void *)) tcp_deconstruct_connection);
+    if (server->thread_list == NULL) {
+        //Not check errors
+        //EBUSY  the mutex is currently locked - impossible
+        pthread_mutex_destroy(&(server->mutex));
+        close(server->socket);
+        debug("Server create: close socket %d", server->socket)
+        free(server);
+        return NULL;
+    }
     memcpy(&server->ip_address.address, &socket_address, sizeof(struct sockaddr));
     server->ip_address.address_len = address_len;
     return server;
@@ -143,7 +151,7 @@ struct ServerArgs {
 };
 
 /**
- * terminate server thread
+ * terminate server thread whit error
  **/
 static void failServerThread(TCPServer *server, int err) {
     int lockErr;
@@ -174,10 +182,8 @@ static _Noreturn void *serverWorker(void *args) {
         int handleConnection;
         int clientSocket;
         Connection *con = (Connection *) malloc(sizeof(Connection));
-        if (con == NULL) {
-            fprintf(stderr, "serverWorker() can't allocate memory");
-            abort();
-        }
+        if (con == NULL)
+            failServerThread(server, ENOMEM);
         debug("serverWorker() create clint connection %p", con)
         pthread_cleanup_push((void (*)(void *)) tcp_deconstruct_connection_without_socket, con)
                 clientSocket = accept(server->socket, &con->ip_address.address, &(server->ip_address.address_len));
@@ -203,6 +209,13 @@ static _Noreturn void *serverWorker(void *args) {
     }
 }
 
+/**
+ * Return
+ * 0 - success
+ * ENOMEM - can't allocate memory
+ * all errors from pthread_create
+ * all errors of pthread_mutex_lock
+ * **/
 int tcp_start_server(TCPServer *server, AcceptFunc func) {
     int err;
     err = pthread_mutex_lock(&server->mutex);
@@ -219,8 +232,7 @@ int tcp_start_server(TCPServer *server, AcceptFunc func) {
     struct ServerArgs *args = malloc(sizeof(struct ServerArgs));
     if (args == NULL) {
         pthread_mutex_unlock(&server->mutex);
-        fputs("tcp_start_server() can't allocate memory", stderr);
-        abort();
+        return ENOMEM;
     }
     args->server = server;
     args->func = func;
@@ -406,33 +418,30 @@ char *tpc_address_to_string(struct sockaddr *addr, char *str, size_t strSize) {
 
 Connection *tcp_create_connection(IpAddress *address, int *error) {
     Connection *con = (Connection *) malloc(sizeof(Connection));
-    int status = -1;
+    int status;
     if (con == NULL) {
-        fprintf(stderr, "Cannot allocate memory for a connection\n");
-        abort();
+        (*error) = ENOMEM;
+        return NULL;
     }
     debug("Create connection %p", con)
-    con->socket = -1;
+    con->ip_address = *address;
     pthread_cleanup_push((void (*)(void *)) tcp_deconstruct_connection_without_socket, con)
-            con->ip_address = *address;
             con->socket = socket(con->ip_address.address.sa_family, SOCK_STREAM, 0);
-            if (con->socket == -1) {
-                (*error) = errno;
-                tcp_deconstruct_connection_without_socket(con);
-                return NULL;
-            }
     pthread_cleanup_pop(0);
+    if (con->socket == -1) {
+        (*error) = errno;
+        tcp_deconstruct_connection_without_socket(con);
+        return NULL;
+    }
     pthread_cleanup_push((void (*)(void *)) tcp_deconstruct_connection, con)
             status = connect(con->socket, &address->address, address->address_len);
-            if (status == -1) {
-                debug("Socket connect error %s", strerror(errno))
-                (*error) = errno;
-            } else {
-                debug("Connect to socket %d", con->socket)
-            }
     pthread_cleanup_pop(0);
     if (status == -1) {
-        con = NULL;
+        debug("Socket connect error %s", strerror(errno))
+        (*error) = errno;
+        return NULL;
+    } else {
+        debug("Connect to socket %d", con->socket)
     }
     return con;
 }
