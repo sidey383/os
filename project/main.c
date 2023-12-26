@@ -209,7 +209,7 @@ void pipeAction(int sig, siginfo_t* info, void* ucontext) {
     size_t _write = 0;
     int size = snprintf(buf, 4094, "[%d] handle SIGPIPE from %d\n", gettid(), info->si_pid);
     while (_write < size) {
-        size_t w = write(STDOUT_FILENO, buf, size - _write);
+        size_t w = write(STDERR_FILENO, buf, size - _write);
         if (w == -1)
             break;
         _write += w;
