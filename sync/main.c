@@ -169,9 +169,12 @@ int mod_thread(struct ModArgs *args) {
 
 _Noreturn void *monitor(void *arg) {
     set_cpu((int)(long)arg);
+    int n = 0;
     while (1) {
         sleep(1);
-        printf("EQ %010d GR %010d LW %010d Mod %010d Mod cycle %010d\n",
+        n++;
+        printf("%03d EQ %010d GR %010d LW %010d Mod %010d Mod cycle %010d\n",
+               n,
                eq_iteration_count,
                gr_iteration_count,
                lw_iteration_count,
